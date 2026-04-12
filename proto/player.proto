@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+message PlayerResponse {
+  message AccountInfo {
+    string uid = 1;
+    string nickname = 2;
+    int32 level = 3;
+    int64 exp = 4;
+    string region = 5;
+    int32 season_id = 6;
+    string preferred_mode = 7;
+    string language = 8;
+    string signature = 9;
+    int32 honor_score = 10;
+    int32 total_likes = 11;
+    string ob_version = 12;
+    int64 created_at_epoch = 13;
+    int64 last_login_epoch = 14;
+    string account_type = 15;
+  }
+
+  message RankInfo {
+    int32 br_rank_code = 21;
+    int32 br_points = 22;
+    int32 br_max_rank_code = 23;
+    bool br_visible = 24;
+    int32 cs_rank_code = 25;
+    int32 cs_points = 26;
+    bool cs_visible = 27;
+  }
+
+  message StatLine {
+    int32 matches = 1;
+    int32 wins = 2;
+    int32 kills = 3;
+    int32 deaths = 4;
+    int32 headshots = 5;
+    float avg_damage = 6;
+  }
+
+  message StatsInfo {
+    StatLine br_solo_stats = 31;
+    StatLine br_duo_stats = 32;
+    StatLine br_squad_stats = 33;
+    StatLine cs_ranked_stats = 34;
+  }
+
+  message GuildLeaderInfo {
+    string uid = 1;
+    string nickname = 2;
+    int32 level = 3;
+    int32 br_rank_code = 4;
+  }
+
+  message SocialInfo {
+    string guild_id = 42;
+    string guild_name = 43;
+    int32 guild_level = 44;
+    int32 guild_member_count = 45;
+    int32 guild_capacity = 46;
+    GuildLeaderInfo guild_leader_info = 47;
+  }
+
+  message PetInfo {
+    string pet_name = 51;
+    int32 pet_level = 52;
+    int64 pet_exp = 53;
+    string pet_active_skill = 54;
+    int32 pet_skin_id = 55;
+    bool pet_is_selected = 56;
+  }
+
+  message CosmeticsInfo {
+    int32 avatar_id = 61;
+    int32 banner_id = 62;
+    int32 pin_id = 63;
+    int32 character_id = 64;
+    repeated int32 equipped_outfit_ids = 65;
+    repeated int32 equipped_weapon_skin_ids = 66;
+  }
+
+  message PassInfo {
+    int32 booyah_pass_level = 71;
+    string fire_pass_status = 72;
+    int32 fire_pass_badge_count = 73;
+  }
+
+  message CreditInfo {
+    int32 credit_score = 81;
+    bool credit_reward_claimed = 82;
+    string credit_summary_period = 83;
+  }
+
+  message BanInfo {
+    bool is_banned = 91;
+    string ban_period = 92;
+    string ban_type = 93;
+  }
+
+  AccountInfo account_info = 1;
+  RankInfo rank_info = 20;
+  StatsInfo stats_info = 30;
+  SocialInfo social_info = 40;
+  PetInfo pet_info = 50;
+  CosmeticsInfo cosmetics_info = 60;
+  PassInfo pass_info = 70;
+  CreditInfo credit_info = 80;
+  BanInfo ban_info = 90;
+}
