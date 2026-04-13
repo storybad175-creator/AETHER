@@ -1,0 +1,16 @@
+REGION_MAP: dict[str, str] = {
+    "IND": "https://ind.freefireapi.com",
+    "BR": "https://br.freefireapi.com",
+    "SG": "https://sg.freefireapi.com",
+    "RU": "https://ru.freefireapi.com",
+    "ID": "https://id.freefireapi.com",
+    "TW": "https://tw.freefireapi.com",
+    "US": "https://us.freefireapi.com",
+    "VN": "https://vn.freefireapi.com",
+    "TH": "https://th.freefireapi.com",
+    "ME": "https://me.freefireapi.com",
+    "PK": "https://pk.freefireapi.com",
+    "CIS": "https://cis.freefireapi.com",
+    "BD": "https://bd.freefireapi.com",
+    "NA": "https://na.freefireapi.com",
+}
