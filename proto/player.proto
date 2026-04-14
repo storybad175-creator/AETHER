@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+message PlayerData {
+  string uid = 1;
+  string nickname = 2;
+  int32 level = 3;
+  int32 exp = 4;
+  string region = 5;
+  int32 season_id = 6;
+  string preferred_mode = 7;
+  string language = 8;
+  string signature = 9;
+  int32 honor_score = 10;
+  int32 total_likes = 11;
+  int32 created_at = 12;
+  int32 last_login = 13;
+  string account_type = 14;
+
+  int32 br_rank_code = 20;
+  int32 br_points = 21;
+  int32 br_max_rank_code = 22;
+  int32 cs_rank_code = 23;
+  int32 cs_points = 24;
+
+  int32 br_solo_matches = 30;
+  int32 br_solo_wins = 31;
+  int32 br_solo_kills = 32;
+  int32 br_solo_deaths = 33;
+  int32 br_solo_headshots = 34;
+  int32 br_solo_damage = 35;
+
+  int32 br_duo_matches = 40;
+  int32 br_duo_wins = 41;
+  int32 br_duo_kills = 42;
+  int32 br_duo_deaths = 43;
+  int32 br_duo_headshots = 44;
+  int32 br_duo_damage = 45;
+
+  int32 br_squad_matches = 50;
+  int32 br_squad_wins = 51;
+  int32 br_squad_kills = 52;
+  int32 br_squad_deaths = 53;
+  int32 br_squad_headshots = 54;
+  int32 br_squad_damage = 55;
+
+  int32 cs_matches = 60;
+  int32 cs_wins = 61;
+  int32 cs_kills = 62;
+
+  string guild_id = 70;
+  string guild_name = 71;
+  int32 guild_level = 72;
+  int32 guild_member_count = 73;
+  int32 guild_capacity = 74;
+  string guild_leader_uid = 75;
+  string guild_leader_name = 76;
+  int32 guild_leader_level = 77;
+
+  string pet_name = 80;
+  int32 pet_level = 81;
+  int32 pet_exp = 82;
+  string pet_skill = 83;
+  int32 pet_skin_id = 84;
+  bool pet_selected = 85;
+
+  int32 avatar_id = 90;
+  int32 banner_id = 91;
+  int32 pin_id = 92;
+  int32 character_id = 93;
+  repeated int32 equipped_outfit_ids = 94;
+  repeated int32 equipped_weapon_skin_ids = 95;
+
+  int32 booyah_pass_level = 100;
+  string fire_pass_status = 101;
+  int32 fire_pass_badge_count = 102;
+  int32 credit_score = 103;
+  bool credit_reward_claimed = 104;
+  string credit_summary_period = 105;
+
+  bool is_banned = 110;
+  string ban_period = 111;
+  string ban_type = 112;
+}
