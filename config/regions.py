@@ -1,0 +1,16 @@
+REGION_MAP = {
+    "IND": "https://ind.freefireapi.com.garena.com",
+    "BR": "https://br.freefireapi.com.garena.com",
+    "SG": "https://sg.freefireapi.com.garena.com",
+    "RU": "https://ru.freefireapi.com.garena.com",
+    "ID": "https://id.freefireapi.com.garena.com",
+    "TW": "https://tw.freefireapi.com.garena.com",
+    "US": "https://us.freefireapi.com.garena.com",
+    "VN": "https://vn.freefireapi.com.garena.com",
+    "TH": "https://th.freefireapi.com.garena.com",
+    "ME": "https://me.freefireapi.com.garena.com",
+    "PK": "https://pk.freefireapi.com.garena.com",
+    "CIS": "https://cis.freefireapi.com.garena.com",
+    "BD": "https://bd.freefireapi.com.garena.com",
+    "NA": "https://na.freefireapi.com.garena.com",
+}
