@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+message PlayerResponse {
+    // This is a simplified schema for documentation.
+    // Real implementation uses field ID map from config/fields.py
+    string nickname = 10;
+    uint32 level = 11;
+    uint64 exp = 12;
+    // ... other fields as per PROTO_FIELD_MAP
+}
