@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package freefire;
+
+message AccountInfo {
+  string uid = 1;
+  string nickname = 2;
+  int32 level = 3;
+  int64 exp = 4;
+  string region = 5;
+  int32 season_id = 6;
+  string preferred_mode = 7;
+  string language = 8;
+  string signature = 9;
+  int32 honor_score = 10;
+  int32 total_likes = 11;
+  string ob_version = 12;
+  int64 created_at_epoch = 13;
+  int64 last_login_epoch = 14;
+  string account_type = 15;
+}
+
+// Additional messages (RankInfo, StatsInfo, etc.) would be defined here
+// following the field IDs in config/fields.py
+
+message PlayerResponse {
+  AccountInfo account = 1;
+  // ... other fields
+}
