@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+message PlayerResponse {
+  // This is a simplified documentation of the response fields
+  // See config/fields.py for the full mapping used by the decoder
+  string uid = 1;
+  string nickname = 2;
+  int32 level = 3;
+  int64 exp = 4;
+  string region = 5;
+  // ... many more fields
+}

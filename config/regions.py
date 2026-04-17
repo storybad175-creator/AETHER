@@ -1,0 +1,16 @@
+REGION_MAP = {
+    "IND": "https://ind.client.ggblueshark.com",
+    "BR": "https://br.client.ggblueshark.com",
+    "SG": "https://sg.client.ggblueshark.com",
+    "RU": "https://ru.client.ggblueshark.com",
+    "ID": "https://id.client.ggblueshark.com",
+    "TW": "https://tw.client.ggblueshark.com",
+    "US": "https://us.client.ggblueshark.com",
+    "VN": "https://vn.client.ggblueshark.com",
+    "TH": "https://th.client.ggblueshark.com",
+    "ME": "https://me.client.ggblueshark.com",
+    "PK": "https://pk.client.ggblueshark.com",
+    "CIS": "https://cis.client.ggblueshark.com",
+    "BD": "https://bd.client.ggblueshark.com",
+    "NA": "https://na.client.ggblueshark.com",
+}
