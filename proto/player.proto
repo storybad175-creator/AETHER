@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+message PlayerData {
+  AccountInfo account = 1;
+  RankInfoDetail rank = 2;
+  StatsInfo stats = 3;
+  SocialInfo social = 4;
+  PetInfo pet = 5;
+  CosmeticsInfo cosmetics = 6;
+  PassInfo pass_info = 7;
+  CreditInfo credit = 8;
+  BanInfo ban = 9;
+}
+
+message AccountInfo {
+  string uid = 1;
+  string nickname = 2;
+  int32 level = 3;
+  int64 exp = 4;
+  string region = 5;
+  int32 season_id = 6;
+  string preferred_mode = 7;
+  string language = 8;
+  string signature = 9;
+  int32 honor_score = 10;
+  int32 total_likes = 11;
+  string ob_version = 12;
+  int64 created_at_epoch = 13;
+  int64 last_login_epoch = 14;
+  string account_type = 15;
+}
+
+message RankInfoDetail {
+  RankDetail battle_royale = 1;
+  RankDetail clash_squad = 2;
+}
+
+message RankDetail {
+  int32 rank_code = 1;
+  int32 points = 2;
+  int32 max_rank_code = 3;
+  bool visible = 4;
+}
+
+message StatsInfo {
+  BRStats battle_royale = 1;
+  CSStats clash_squad = 2;
+}
+
+message BRStats {
+  StatLine solo = 1;
+  StatLine duo = 2;
+  StatLine squad = 3;
+}
+
+message StatLine {
+  int32 matches = 1;
+  int32 wins = 2;
+  int32 kills = 3;
+  int32 deaths = 4;
+  int32 headshots = 5;
+  float avg_damage_per_match = 6;
+}
+
+message CSStats {
+  CSStatLine ranked = 1;
+}
+
+message CSStatLine {
+  int32 matches = 1;
+  int32 wins = 2;
+  int32 kills = 3;
+}
+
+message SocialInfo {
+  GuildInfo guild = 1;
+}
+
+message GuildInfo {
+  string id = 1;
+  string name = 2;
+  int32 level = 3;
+  int32 member_count = 4;
+  int32 capacity = 5;
+  GuildLeader leader = 6;
+}
+
+message GuildLeader {
+  string uid = 1;
+  string nickname = 2;
+  int32 level = 3;
+  int32 rank_code = 4;
+}
+
+message PetInfo {
+  string name = 1;
+  int32 level = 2;
+  int32 exp = 3;
+  string active_skill = 4;
+  int32 skin_id = 5;
+  bool is_selected = 6;
+}
+
+message CosmeticsInfo {
+  int32 avatar_id = 1;
+  int32 banner_id = 2;
+  int32 pin_id = 3;
+  int32 character_id = 4;
+  repeated int32 equipped_outfit_ids = 5;
+  repeated int32 equipped_weapon_skin_ids = 6;
+}
+
+message PassInfo {
+  int32 booyah_pass_level = 1;
+  string fire_pass_status = 2;
+  int32 fire_pass_badge_count = 3;
+}
+
+message CreditInfo {
+  int32 score = 1;
+  bool reward_claimed = 2;
+  string summary_period = 3;
+}
+
+message BanInfo {
+  bool is_banned = 1;
+  string ban_period = 2;
+  string ban_type = 3;
+}

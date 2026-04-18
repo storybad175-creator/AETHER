@@ -1,0 +1,16 @@
+REGION_MAP = {
+    "IND": "https://client.ind.freefiremobile.com",
+    "BR": "https://client.br.freefiremobile.com",
+    "SG": "https://client.sg.freefiremobile.com",
+    "RU": "https://client.ru.freefiremobile.com",
+    "ID": "https://client.id.freefiremobile.com",
+    "TW": "https://client.tw.freefiremobile.com",
+    "US": "https://client.us.freefiremobile.com",
+    "VN": "https://client.vn.freefiremobile.com",
+    "TH": "https://client.th.freefiremobile.com",
+    "ME": "https://client.me.freefiremobile.com",
+    "PK": "https://client.pk.freefiremobile.com",
+    "CIS": "https://client.cis.freefiremobile.com",
+    "BD": "https://client.bd.freefiremobile.com",
+    "NA": "https://client.na.freefiremobile.com",
+}
