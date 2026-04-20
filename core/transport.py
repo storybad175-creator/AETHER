@@ -36,16 +36,21 @@ class AsyncTransport:
 
     async def post(self, url: str, data: bytes, retry_count: int = 4) -> bytes:
         """
-        Performs an authenticated POST request with retry logic.
+        Performs a POST request with retry logic.
         """
         for attempt in range(1, retry_count + 1):
             try:
-                token = await jwt_manager.get_token()
                 headers = {
-                    "Authorization": f"Bearer {token}",
                     "Content-Type": "application/x-protobuf",
                     "X-Garena-OB": settings.OB_VERSION
                 }
+
+                try:
+                    token = await jwt_manager.get_token()
+                    if token:
+                        headers["Authorization"] = f"Bearer {token}"
+                except Exception as e:
+                    logger.warning(f"Could not retrieve JWT token: {e}. Attempting without auth.")
 
                 async with self.session.post(url, data=data, headers=headers, timeout=12) as resp:
                     if resp.status == 200:
