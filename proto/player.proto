@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+// Note: This is a simplified documentation of the response schema.
+// In practice, the API returns a complex nested structure
+// that we decode using Strategy B blackbox field mapping.
+
+message PlayerResponse {
+  AccountInfo account = 1;
+  RankInfo rank = 2;
+  StatsInfo stats = 3;
+  // ... more fields
+}
+
+message AccountInfo {
+  string uid = 101;
+  string nickname = 102;
+  int32 level = 103;
+  // ...
+}
