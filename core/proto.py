@@ -1,7 +1,6 @@
 import struct
 import logging
 from typing import Any, Dict, List, Optional, Union
-from config.fields import REQUEST_FIELD_MAP, RESPONSE_FIELD_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Handles repeated fields and nested messages recursively.
     """
     result = {}
     pos = 0
@@ -68,29 +67,37 @@ def decode_response_raw(data: bytes) -> Dict[int, Any]:
 
         if wire_type == 0: # Varint
             val, pos = decode_varint(data, pos)
-            result[field_id] = val
+            val_to_store = val
         elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
+            val_to_store = struct.unpack("<Q", data[pos:pos+8])[0]
             pos += 8
         elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
             length, pos = decode_varint(data, pos)
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
+            # Recursive decoding for suspected nested messages (Strategy B optimization)
+            # We assume message-type fields are in the range 1-9 for this protocol
+            if 1 <= field_id <= 9:
+                try:
+                    val_to_store = decode_response_raw(val)
+                except:
+                    val_to_store = val
             else:
-                result[field_id] = val
+                val_to_store = val
         elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
+            val_to_store = struct.unpack("<I", data[pos:pos+4])[0]
             pos += 4
         else:
             raise ValueError(f"Unsupported wire type: {wire_type}")
+
+        # Handle repeated fields
+        if field_id in result:
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val_to_store)
+        else:
+            result[field_id] = val_to_store
 
     return result
 

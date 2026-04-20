@@ -2,9 +2,13 @@
 # source: player.proto
 
 class PlayerResponse:
+    """
+    Minimal stub for PlayerResponse to maintain Strategy A compatibility.
+    Decoding is primarily handled by the recursive Strategy B in core/proto.py.
+    """
     def __init__(self):
         pass
 
     def ParseFromString(self, data):
-        # Decoding is primarily handled by Strategy B in decoder.py
+        # Implementation here would delegate to Strategy B
         pass
