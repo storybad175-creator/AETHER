@@ -26,7 +26,8 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
         uid = req.uid
         region = req.region
     except Exception as e:
-        # This will be caught by the outer try-except if not handled
+        # Pydantic validation errors are handled by middleware in FastAPI,
+        # but for CLI/direct calls, we raise them as INVALID_UID/REGION if appropriate.
         raise
 
     # 2. Cache Check
@@ -73,7 +74,12 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             encrypted_request = aes_encrypt(proto_bytes)
 
             # 6. Network Transport
-            raw_response = await transport.post(url, encrypted_request)
+            try:
+                raw_response = await transport.post(url, encrypted_request)
+            except FFError as e:
+                if e.code == ErrorCode.PLAYER_NOT_FOUND:
+                    e.message += " Player may exist in another region. Try: SG, IND, BR, ID."
+                raise e
 
             # 7. Decrypt & Decode
             player_data = decode_player_data(raw_response)

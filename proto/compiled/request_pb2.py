@@ -2,12 +2,15 @@
 # source: request.proto
 
 class PlayerRequest:
+    """
+    Minimal stub for PlayerRequest to maintain Strategy A compatibility.
+    When HAS_COMPILED is True, this class is used for encoding.
+    """
     def __init__(self):
         self.uid = ""
         self.region = ""
         self.version = ""
 
     def SerializeToString(self):
-        # Minimal implementation of Protobuf encoding for PlayerRequest
         from core.proto import encode_request_raw
         return encode_request_raw(self.uid, self.region, self.version)

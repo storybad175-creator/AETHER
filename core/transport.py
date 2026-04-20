@@ -59,7 +59,8 @@ class AsyncTransport:
                     if resp.status == 401:
                         logger.warning("Received 401 Unauthorized. Refreshing JWT and retrying...")
                         jwt_manager.force_refresh()
-                        if attempt < retry_count:
+                        # Strictly retry ONCE on 401
+                        if attempt < 2:
                             continue
                         raise FFError(ErrorCode.AUTH_FAILED, "Authentication failed after refresh.")
 

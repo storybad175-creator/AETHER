@@ -45,6 +45,7 @@ class JWTManager:
 
         try:
             # We use a raw post here to avoid bearer token loop
+            # and reuse the shared transport session
             async with transport.session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
                     logger.error(f"MajorLogin failed with status {resp.status}")
@@ -55,6 +56,8 @@ class JWTManager:
 
                 data = await resp.json()
                 self._token = data.get("jwt")
+                if not self._token:
+                    raise FFError(ErrorCode.AUTH_FAILED, "No JWT token in MajorLogin response.")
 
                 # Default expiry 24 hours if not provided
                 expires_in = data.get("expires_in", 86400)
