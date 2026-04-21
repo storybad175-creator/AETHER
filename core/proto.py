@@ -77,8 +77,15 @@ def decode_response_raw(data: bytes) -> Dict[int, Any]:
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
+            # Check if it's a known nested message ID (1-9)
+            if 1 <= field_id <= 9:
+                try:
+                    # Recursive decode for known nested message fields
+                    val = decode_response_raw(val)
+                except Exception:
+                    # Fallback to raw bytes if recursive decoding fails
+                    pass
+
             if field_id in result:
                 # Handle repeated fields
                 if not isinstance(result[field_id], list):
