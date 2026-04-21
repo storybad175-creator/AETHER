@@ -11,17 +11,27 @@ from core.transport import transport
 logging.basicConfig(level=logging.ERROR)
 
 async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
+    """Processes a file containing UIDs and prints results as JSONL concurrently."""
     try:
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        semaphore = asyncio.Semaphore(10)
+
+        async def fetch_worker(uid: str):
+            async with semaphore:
+                try:
+                    result = await fetch_player(uid, region)
+                    return result.model_dump_json()
+                except Exception as e:
+                    return json.dumps({"uid": uid, "error": str(e)})
+
+        tasks = [fetch_worker(uid) for uid in uids]
+        results = await asyncio.gather(*tasks)
+
+        for res in results:
+            print(res)
+
     finally:
         await transport.close()
 

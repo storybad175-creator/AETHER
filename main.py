@@ -40,9 +40,20 @@ app.include_router(router)
 
 if __name__ == "__main__":
     import sys
-    port = settings.SERVER_PORT
+    base_port = settings.SERVER_PORT
     if len(sys.argv) > 1 and sys.argv[1] == "--port":
-        port = int(sys.argv[2])
+        base_port = int(sys.argv[2])
 
     logger.info(f"API Banner: OB53 UNLIMITED - Active Regions: 14")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # Port conflict resolution (FM-09)
+    for port_offset in range(6): # Try up to 5 alternative ports
+        port = base_port + port_offset
+        try:
+            uvicorn.run(app, host="0.0.0.0", port=port, log_level="error" if port_offset > 0 else "info")
+            break
+        except OSError as e:
+            if port_offset == 5:
+                logger.error(f"Failed to bind to any port after 5 attempts: {e}")
+                sys.exit(1)
+            logger.warning(f"Port {port} is occupied. Retrying on {port + 1}...")

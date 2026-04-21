@@ -14,17 +14,45 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     try:
         # Step 1: AES Decrypt
-        decrypted_bytes = aes_decrypt(raw_encrypted)
+        try:
+            decrypted_bytes = aes_decrypt(raw_encrypted)
+        except Exception as e:
+            raise FFError(ErrorCode.DECODE_ERROR, f"AES decryption failed: {str(e)}")
 
         # Step 2: Protobuf Decode (Top level)
         # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
-        raw_msg = decode_response(decrypted_bytes)
+        try:
+            raw_msg = decode_response(decrypted_bytes)
+            if not raw_msg:
+                raise ValueError("Empty protobuf message")
+        except Exception as e:
+            if isinstance(e, FFError):
+                raise
+            # FM-04: AES Key Rotation check
+            logger.error(f"Protobuf decoding failed after decryption: {e}")
+            print("\n" + "="*60)
+            print("WARNING: AES Decryption succeeded but Protobuf parsing failed.")
+            print("This usually indicates that Garena has rotated the AES keys.")
+            print("Action Required: Update AES_KEY and AES_IV in your .env file.")
+            print("="*60 + "\n")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Decryption succeeded but Protobuf decoding failed. AES keys may have rotated.",
+                extra={
+                    "possible_key_rotation": True,
+                    "action": "Update AES_KEY and AES_IV in .env"
+                }
+            )
 
         def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
+            if not isinstance(data, dict):
+                return default
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
-            if isinstance(data, bytes):
+            if isinstance(data, dict):
+                return data
+            if isinstance(data, bytes) and data:
                 return decode_response(data)
             return {}
 
