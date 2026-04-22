@@ -3,105 +3,121 @@ Protobuf field ID mappings for request and response messages.
 Based on community reverse-engineering of the Garena Free Fire wire protocol.
 """
 
-# Request Field IDs (Strategy B)
+# --- Top-Level Message Fields ---
+FLD_ACCOUNT = 1
+FLD_RANK = 2
+FLD_STATS = 3
+FLD_SOCIAL = 4
+FLD_PET = 5
+FLD_COSMETICS = 6
+FLD_PASS = 7
+FLD_CREDIT = 8
+FLD_BAN = 9
+
+# --- Request Fields (Strategy B) ---
+REQ_UID = 1
+REQ_REGION = 2
+REQ_VERSION = 3
+
+# --- Account Info Fields (Category 1) ---
+FLD_ACC_UID = 101
+FLD_ACC_NICKNAME = 102
+FLD_ACC_LEVEL = 103
+FLD_ACC_EXP = 104
+FLD_ACC_REGION = 105
+FLD_ACC_SEASON_ID = 106
+FLD_ACC_PREF_MODE = 107
+FLD_ACC_LANGUAGE = 108
+FLD_ACC_SIGNATURE = 109
+FLD_ACC_HONOR_SCORE = 110
+FLD_ACC_LIKES = 111
+FLD_ACC_OB_VERSION = 112
+FLD_ACC_CREATED_AT = 113
+FLD_ACC_LAST_LOGIN = 114
+FLD_ACC_TYPE = 115
+
+# --- Rank Info Fields (Category 2) ---
+FLD_RANK_BR_CODE = 201
+FLD_RANK_BR_POINTS = 202
+FLD_RANK_BR_MAX_CODE = 203
+FLD_RANK_BR_VISIBLE = 204
+FLD_RANK_CS_CODE = 205
+FLD_RANK_CS_POINTS = 206
+FLD_RANK_CS_VISIBLE = 207
+
+# --- Stats Info Fields (Category 3) ---
+FLD_STATS_BR_SOLO = 301
+FLD_STATS_BR_DUO = 302
+FLD_STATS_BR_SQUAD = 303
+FLD_STATS_CS_RANKED = 304
+
+# --- StatLine sub-fields (Category 4xx) ---
+FLD_STAT_MATCHES = 401
+FLD_STAT_WINS = 402
+FLD_STAT_KILLS = 403
+FLD_STAT_DEATHS = 404
+FLD_STAT_HEADSHOTS = 405
+FLD_STAT_AVG_DMG = 406
+FLD_STAT_BOOYAHS = 407
+
+# --- Social / Guild Fields (Category 4) ---
+FLD_SOC_GUILD_ID = 501
+FLD_SOC_GUILD_NAME = 502
+FLD_SOC_GUILD_LEVEL = 503
+FLD_SOC_GUILD_MEMBERS = 504
+FLD_SOC_GUILD_CAPACITY = 505
+FLD_SOC_GUILD_LEADER_UID = 506
+FLD_SOC_GUILD_LEADER_NICK = 507
+FLD_SOC_GUILD_LEADER_LEVEL = 508
+FLD_SOC_GUILD_LEADER_RANK = 509
+
+# --- Pet Info Fields (Category 5) ---
+FLD_PET_NAME = 601
+FLD_PET_LEVEL = 602
+FLD_PET_EXP = 603
+FLD_PET_SKILL = 604
+FLD_PET_SKIN_ID = 605
+FLD_PET_SELECTED = 606
+
+# --- Cosmetics Fields (Category 6) ---
+FLD_COS_AVATAR = 701
+FLD_COS_BANNER = 702
+FLD_COS_PIN = 703
+FLD_COS_CHAR_ID = 704
+FLD_COS_OUTFITS = 705
+FLD_COS_WEAPONS = 706
+
+# --- Pass Info Fields (Category 7) ---
+FLD_PASS_LEVEL = 801
+FLD_PASS_STATUS = 802
+FLD_PASS_BADGES = 803
+
+# --- Credit Info Fields (Category 8) ---
+FLD_CRED_SCORE = 901
+FLD_CRED_CLAIMED = 902
+FLD_CRED_PERIOD = 903
+
+# --- Ban Info Fields (Category 9) ---
+FLD_BAN_IS_BANNED = 1001
+FLD_BAN_PERIOD = 1002
+FLD_BAN_TYPE = 1003
+
+# Mapping for Strategy B
 REQUEST_FIELD_MAP = {
-    1: "uid",
-    2: "region",
-    3: "version",
+    REQ_UID: "uid",
+    REQ_REGION: "region",
+    REQ_VERSION: "version",
 }
 
-# Response Field IDs (Strategy B) - Grouped by Category
-# Note: These are example mappings based on the target schema
+# Response mapping (Mainly for debugging/logging)
 RESPONSE_FIELD_MAP = {
-    # Account Info
-    1: "account",
-    101: "uid",
-    102: "nickname",
-    103: "level",
-    104: "exp",
-    105: "region",
-    106: "season_id",
-    107: "preferred_mode",
-    108: "language",
-    109: "signature",
-    110: "honor_score",
-    111: "total_likes",
-    112: "ob_version",
-    113: "created_at_epoch",
-    114: "last_login_epoch",
-    115: "account_type",
-
-    # Rank Info
-    2: "rank",
-    201: "br_rank_code",
-    202: "br_points",
-    203: "br_max_rank_code",
-    204: "br_visible",
-    205: "cs_rank_code",
-    206: "cs_points",
-    207: "cs_visible",
-
-    # Stats Info
-    3: "stats",
-    301: "br_solo",
-    302: "br_duo",
-    303: "br_squad",
-    304: "cs_ranked",
-
-    # StatLine sub-fields (usually nested or flat with prefixes)
-    401: "matches",
-    402: "wins",
-    403: "kills",
-    404: "deaths",
-    405: "headshots",
-    406: "avg_damage",
-    407: "booyahs",
-
-    # Social / Guild
-    4: "social",
-    501: "guild_id",
-    502: "guild_name",
-    503: "guild_level",
-    504: "guild_member_count",
-    505: "guild_capacity",
-    506: "guild_leader_uid",
-    507: "guild_leader_nickname",
-    508: "guild_leader_level",
-    509: "guild_leader_rank",
-
-    # Pet Info
-    5: "pet",
-    601: "pet_name",
-    602: "pet_level",
-    603: "pet_exp",
-    604: "pet_active_skill",
-    605: "pet_skin_id",
-    606: "pet_is_selected",
-
-    # Cosmetics
-    6: "cosmetics",
-    701: "avatar_id",
-    702: "banner_id",
-    703: "pin_id",
-    704: "character_id",
-    705: "equipped_outfit_ids",
-    706: "equipped_weapon_skin_ids",
-
-    # Pass Info
-    7: "pass_info",
-    801: "booyah_pass_level",
-    802: "fire_pass_status",
-    803: "fire_pass_badge_count",
-
-    # Credit Info
-    8: "credit",
-    901: "credit_score",
-    902: "credit_reward_claimed",
-    903: "credit_summary_period",
-
-    # Ban Info
-    9: "ban",
-    1001: "is_banned",
-    1002: "ban_period",
-    1003: "ban_type",
+    FLD_ACCOUNT: "account",
+    FLD_RANK: "rank",
+    FLD_STATS: "stats",
+    FLD_SOCIAL: "social",
+    FLD_PET: "pet",
+    FLD_COSMETICS: "cosmetics",
+    FLD_PASS: "pass_info",
+    FLD_CREDIT: "credit",
+    FLD_BAN: "ban",
 }

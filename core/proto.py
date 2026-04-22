@@ -33,12 +33,16 @@ def decode_varint(data: bytes, pos: int) -> tuple[int, int]:
     result = 0
     shift = 0
     while True:
+        if pos >= len(data):
+            raise IndexError("Truncated varint: unexpected end of data")
         b = data[pos]
         result |= (b & 0x7F) << shift
         pos += 1
         if not (b & 0x80):
             break
         shift += 7
+        if shift > 64:
+            raise ValueError("Varint too long (> 64 bits)")
     return result, pos
 
 def encode_request_raw(uid: str, region: str, version: str) -> bytes:
@@ -53,44 +57,60 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Recursively decodes nested messages for identified field IDs.
     """
     result = {}
     pos = 0
+
+    # Field IDs that are known to contain nested messages
+    MESSAGE_FIELD_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 301, 302, 303, 304}
+
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
-        except IndexError:
-            break # Reached end of data
+        except (IndexError, ValueError):
+            break # Stop if we can't decode the tag
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
+        val: Any = None
         if wire_type == 0: # Varint
             val, pos = decode_varint(data, pos)
-            result[field_id] = val
         elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
+            if pos + 8 > len(data): break
+            val = struct.unpack("<Q", data[pos:pos+8])[0]
             pos += 8
         elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
             length, pos = decode_varint(data, pos)
+            if pos + length > len(data): break
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
-            else:
-                result[field_id] = val
+            # Recursive decode for identified sub-messages
+            if field_id in MESSAGE_FIELD_IDS and length > 0:
+                try:
+                    nested_val = decode_response_raw(val)
+                    if nested_val: # Only use if it actually decoded something
+                        val = nested_val
+                except Exception:
+                    pass # Fallback to raw bytes if decoding fails
         elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
+            if pos + 4 > len(data): break
+            val = struct.unpack("<I", data[pos:pos+4])[0]
             pos += 4
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            # Skip unknown wire types if possible, but usually indicates corruption
+            logger.warning(f"Unknown wire type {wire_type} at pos {pos}")
+            break
+
+        # Handle repeated fields
+        if field_id in result:
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
+        else:
+            result[field_id] = val
 
     return result
 
@@ -100,13 +120,15 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
     """Entry point for encoding player requests."""
     if HAS_COMPILED:
         try:
+            # Note: Strategy A classes should implement a basic SerializeToString
+            # if they are just stubs, or the real thing if fully compiled.
             req = request_pb2.PlayerRequest()
             req.uid = uid
             req.region = region
             req.version = version
             return req.SerializeToString()
         except Exception as e:
-            logger.warning(f"Strategy A encoding failed: {e}. Falling back to Strategy B.")
+            logger.debug(f"Strategy A encoding failed: {e}. Falling back to Strategy B.")
 
     return encode_request_raw(uid, region, version)
 
