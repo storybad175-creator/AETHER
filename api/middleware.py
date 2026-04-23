@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
@@ -13,6 +13,7 @@ from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Injects a unique X-Request-ID into every response header."""
     async def dispatch(self, request: Request, call_next):
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
@@ -21,41 +22,52 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
+    """
+    Implements a simple in-memory sliding window rate limiter per client IP.
+    Default: 30 requests per minute.
+    """
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task: Optional[asyncio.Task] = None
 
     async def _cleanup_loop(self):
-        """Periodically removes inactive client IP records."""
+        """Periodically removes inactive client IP records to prevent memory leaks."""
         while True:
-            await asyncio.sleep(300) # Every 5 minutes
+            await asyncio.sleep(300)
             now = time.time()
-            to_delete = []
-            for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
-                if not ts_list or now - ts_list[-1] > 300:
-                    to_delete.append(ip)
-
+            to_delete = [ip for ip, ts in self.visits.items() if not ts or now - ts[-1] > 300]
             for ip in to_delete:
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
-        # Filter timestamps within the last 60 seconds
+        # Sliding window: filter for timestamps within the last 60s
         self.visits[client_ip] = [t for t in self.visits.get(client_ip, []) if now - t < 60]
 
         if len(self.visits[client_ip]) >= settings.RATE_LIMIT_RPM:
             return JSONResponse(
                 status_code=429,
                 content={
+                    "metadata": {
+                        "request_uid": request.query_params.get("uid", "N/A"),
+                        "request_region": request.query_params.get("region", "N/A"),
+                        "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                        "response_time_ms": 0,
+                        "api_version": settings.OB_VERSION,
+                        "cache_hit": False
+                    },
+                    "data": None,
                     "error": {
                         "code": "RATE_LIMITED",
-                        "message": "Too many requests. Please try again later.",
-                        "retryable": True
+                        "message": "Too many requests. Please respect the 30 RPM limit.",
+                        "retryable": True,
+                        "extra": {"retry_after": 60}
                     }
                 },
                 headers={"Retry-After": "60"}
@@ -65,6 +77,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 async def error_handler_middleware(request: Request, call_next):
+    """
+    Outermost middleware to catch all exceptions and return structured JSON.
+    Converts FFErrors and Pydantic ValidationErrors into consistent PlayerResponse shapes.
+    """
     try:
         return await call_next(request)
     except FFError as exc:
@@ -93,21 +109,40 @@ async def error_handler_middleware(request: Request, call_next):
         return JSONResponse(
             status_code=400,
             content={
+                "metadata": {
+                    "request_uid": request.query_params.get("uid", "N/A"),
+                    "request_region": request.query_params.get("region", "N/A"),
+                    "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    "response_time_ms": 0,
+                    "api_version": settings.OB_VERSION,
+                    "cache_hit": False
+                },
+                "data": None,
                 "error": {
                     "code": "INVALID_INPUT",
                     "message": exc.errors()[0]["msg"],
-                    "retryable": False
+                    "retryable": False,
+                    "extra": {"detail": exc.errors()}
                 }
             }
         )
     except Exception as exc:
-        logger.exception("Unhandled exception")
+        logger.exception("FATAL: Unhandled exception in middleware chain")
         return JSONResponse(
             status_code=500,
             content={
+                "metadata": {
+                    "request_uid": request.query_params.get("uid", "N/A"),
+                    "request_region": request.query_params.get("region", "N/A"),
+                    "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    "response_time_ms": 0,
+                    "api_version": settings.OB_VERSION,
+                    "cache_hit": False
+                },
+                "data": None,
                 "error": {
                     "code": "INTERNAL_ERROR",
-                    "message": "An unexpected internal error occurred.",
+                    "message": f"An unexpected internal error occurred: {type(exc).__name__}",
                     "retryable": False
                 }
             }

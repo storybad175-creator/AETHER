@@ -17,9 +17,15 @@ REGION_MAP: dict[str, str] = {
     "PK": "https://client.pk.freefiremobile.com",
     "CIS": "https://client.cis.freefiremobile.com",
     "BD": "https://client.bd.freefiremobile.com",
-    "NA": "https://client.us.freefiremobile.com",  # NA often shares with US or has its own
+    "NA": "https://client.us.freefiremobile.com", # NA often shares infrastructure with US
 }
 
 def get_region_url(region: str) -> str:
-    """Returns the base URL for a given region code."""
-    return REGION_MAP.get(region.upper())
+    """
+    Returns the base URL for a given region code.
+    Raises ValueError if region is invalid.
+    """
+    url = REGION_MAP.get(region.upper())
+    if not url:
+        raise ValueError(f"Unsupported region: {region}")
+    return url
