@@ -1,20 +1,20 @@
 # Free Fire UID Verification API — APEX v3.0 UNLIMITED
 
-A high-performance, asynchronous Python API and CLI for fetching comprehensive player data across all 14 Garena regions. Optimized for OB53 (April 2026).
+The definitive, production-ready implementation for fetching comprehensive Free Fire player data across all 14 Garena regions. Optimized for **OB53 (April 2026)**.
 
-## Features
+## 🚀 Features
 
-- **All 14 Regions Supported**: IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, NA.
-- **Deep Data Retrieval**: Account info, BR/CS ranks, detailed stats (Solo/Duo/Squad), Guild info, Pet details, equipped cosmetics, and ban status.
-- **Robust Architecture**:
-  - AES-CBC payload encryption/decryption.
-  - Dual Protobuf strategy (Compiled / Raw Binary fallback).
-  - JWT lifecycle management with auto-refresh.
-  - TTL In-memory cache with LRU eviction.
-  - Exponential backoff and retry logic.
-- **Dual Interface**: FastAPI web server and a powerful CLI.
+- **Global Coverage**: Supports IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, and NA.
+- **Detailed Data**: Fetches account info, BR/CS ranks, detailed stats (Solo/Duo/Squad), Guild info, Pet details, equipped cosmetics, and ban status.
+- **Enterprise Architecture**:
+  - **AES-CBC** payload encryption/decryption.
+  - **Recursive Protobuf** Strategy B decoder (no .proto required).
+  - **JWT Lifecycle** manager with proactive auto-refresh.
+  - **TTL Cache** with LRU eviction and cache stampede protection.
+  - **Exponential Backoff** retry logic for high reliability.
+- **Dual Interface**: Full FastAPI web server and a feature-rich CLI.
 
-## Installation
+## 🛠️ Installation
 
 ### Standard Setup
 ```bash
@@ -22,7 +22,7 @@ git clone https://github.com/your-repo/ff-api.git
 cd ff-api
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your specific credentials
 ```
 
 ### Termux (Android)
@@ -30,42 +30,43 @@ cp .env.example .env
 pkg update && pkg upgrade
 pkg install python rust binutils
 pip install -r requirements.txt
+cp .env.example .env
 ```
 
-## Configuration (.env)
+## ⚙️ Configuration (.env)
 
-1. **Garena Guest Credentials**: Use Frida or a proxy (like Burp/Proxyman) to capture the `MajorLogin` request from the Free Fire app to get your guest UID and Token.
-2. **AES Constants**: Key and IV are extracted from the APK's native libraries (`libil2cpp.so` or `libunity.so`).
-3. **OB Version**: Update `OB_VERSION` in `.env` when a new game update is released.
+1.  **Garena Guest Credentials**: Use a proxy (Burp Suite, Proxyman) or Frida to capture the `MajorLogin` request from the Free Fire app.
+2.  **AES Constants**: Key and IV are extracted from the APK's `libil2cpp.so`. Check community forums for the latest Hex values for the current OB version.
+3.  **OB Version**: Update `OB_VERSION` in `.env` whenever a new game update drops.
 
-## Usage
+## 🖥️ Usage
 
-### Web Server
+### Web Server (FastAPI)
 ```bash
-python main.py --port 8080
+python main.py
 ```
-Endpoints:
-- `GET /player?uid={uid}&region={region}`
-- `GET /batch?uids={u1,u2}&region={region}`
-- `GET /health`
-- `GET /regions`
+- **GET** `/player?uid={uid}&region={region}`: Fetch single player.
+- **GET** `/batch?uids={u1,u2}&region={region}`: Concurrent fetch for up to 10 UIDs.
+- **GET** `/health`: Check API status and version.
+- **GET** `/regions`: List all 14 supported regions.
 
-### CLI
+### CLI (argparse)
 ```bash
-# Single lookup
+# Single Lookup
 python cli.py --uid 123456789 --region IND
 
-# Batch lookup from file
-python cli.py --batch uids.txt --region SG
+# Batch Lookup from File
+python cli.py --batch uids.txt --region SG --format compact
 
-# List regions
-python cli.py --regions
+# Health & Version Check
+python cli.py --health
 ```
 
-## Testing
+## 🧪 Testing
+Run the comprehensive test suite with:
 ```bash
 pytest
 ```
 
-## Disclaimer
+## ⚠️ Disclaimer
 This project is for educational and research purposes only. Use responsibly and respect Garena's Terms of Service.

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class JWTManager:
     """
     Manages the Garena MajorLogin JWT authentication lifecycle.
-    Includes auto-refresh and proactive expiry handling.
+    Includes auto-refresh, thread-safe access, and proactive expiry handling.
     """
     def __init__(self):
         self._token: Optional[str] = None
@@ -20,56 +20,67 @@ class JWTManager:
     async def get_token(self) -> str:
         """
         Returns a valid JWT token.
-        Refreshes if the token is missing, expired, or near expiry.
+        Refreshes if the token is missing, expired, or within 60 seconds of expiry.
         """
         async with self._lock:
-            # Proactive refresh: if token expires in less than 60 seconds
-            if not self._token or time.time() > (self._expires_at - 60):
+            now = time.time()
+            if not self._token or now > (self._expires_at - 60):
                 await self.refresh()
             return self._token
 
     async def refresh(self):
         """
-        Performs the MajorLogin request to obtain a new JWT.
+        Performs the Garena MajorLogin request to obtain a new JWT.
+        Uses guest credentials from settings.
         """
-        from core.transport import transport # Local import to avoid circular dependency
+        # Local import to avoid circular dependency with core.transport
+        from core.transport import transport
 
-        logger.info("Refreshing Garena MajorLogin JWT...")
+        logger.info("Initiating Garena MajorLogin JWT refresh...")
 
         url = "https://loginbp.ggblueshark.com/MajorLogin"
         payload = {
             "uid": settings.GARENA_GUEST_UID,
             "token": settings.GARENA_GUEST_TOKEN,
-            "region": "SG" # MajorLogin usually uses a stable region
+            "region": "SG" # Stable region for auth endpoint
         }
 
         try:
-            # We use a raw post here to avoid bearer token loop
+            # Note: We use the session directly to avoid bearer token recursion in transport.post
             async with transport.session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
-                    logger.error(f"MajorLogin failed with status {resp.status}")
+                    body = await resp.text()
+                    logger.error(f"MajorLogin failed ({resp.status}): {body}")
                     raise FFError(
                         ErrorCode.AUTH_FAILED,
-                        "Failed to authenticate with Garena MajorLogin endpoint."
+                        f"Garena authentication failed with status {resp.status}.",
+                        retryable=True
                     )
 
                 data = await resp.json()
-                self._token = data.get("jwt")
+                token = data.get("jwt")
+                if not token:
+                    logger.error("MajorLogin response missing 'jwt' field.")
+                    raise FFError(ErrorCode.AUTH_FAILED, "MajorLogin response missing JWT.")
 
-                # Default expiry 24 hours if not provided
-                expires_in = data.get("expires_in", 86400)
-                self._expires_at = time.time() + float(expires_in)
+                self._token = token
+                # Default to 24 hours (86400s) if expires_in is missing
+                expires_in = float(data.get("expires_in", 86400))
+                self._expires_at = time.time() + expires_in
 
                 logger.info(f"JWT refreshed successfully. Expires at: {time.ctime(self._expires_at)}")
 
+        except asyncio.TimeoutError:
+            logger.error("MajorLogin request timed out.")
+            raise FFError(ErrorCode.TIMEOUT, "Authentication request timed out.", retryable=True)
         except Exception as e:
             if isinstance(e, FFError):
                 raise
             logger.exception("Unexpected error during JWT refresh")
-            raise FFError(ErrorCode.AUTH_FAILED, f"JWT refresh failed: {str(e)}")
+            raise FFError(ErrorCode.AUTH_FAILED, f"JWT refresh failed: {str(e)}", retryable=True)
 
     def force_refresh(self):
-        """Invalidates current token to trigger refresh on next get_token call."""
+        """Invalidates current token to trigger a refresh on the next request."""
         self._token = None
         self._expires_at = 0
 
