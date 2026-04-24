@@ -80,10 +80,10 @@ class StatLine(BaseModel):
     win_rate: str = "0.00%"
     kills: int = 0
     deaths: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
     headshots: int = 0
     headshot_rate: str = "0.00%"
-    avg_damage_per_match: float = 0.0
+    avg_damage_per_match: Annotated[float, Field(ge=0.0)] = 0.0
     booyahs: int = 0
 
 class BRStats(BaseModel):
@@ -96,11 +96,11 @@ class CSRankedStats(BaseModel):
     wins: int = 0
     win_rate: str = "0.00%"
     kills: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
 
 class StatsInfo(BaseModel):
     battle_royale: BRStats
-    clash_squad: dict[str, CSRankedStats]
+    clash_squad: dict[str, CSRankedStats] = Field(..., alias="clash_squad")
 
 class GuildLeader(BaseModel):
     uid: str

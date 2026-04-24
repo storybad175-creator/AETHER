@@ -16,12 +16,18 @@ async def run_batch(file_path: str, region: str):
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        # Concurrency limit: 10
+        semaphore = asyncio.Semaphore(10)
+
+        async def limited_fetch(uid):
+            async with semaphore:
+                try:
+                    result = await fetch_player(uid, region)
+                    print(result.model_dump_json())
+                except Exception as e:
+                    print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+
+        await asyncio.gather(*(limited_fetch(uid) for uid in uids))
     finally:
         await transport.close()
 

@@ -25,13 +25,35 @@ def test_proto_response_decode_nested():
 
     decoded = decode_response(outer_payload)
     assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
+    assert isinstance(decoded[1], dict)
 
-    inner_decoded = decode_response(decoded[1])
+    inner_decoded = decoded[1]
     assert inner_decoded[102] == nickname_val
+
+def test_proto_recursive_decoding():
+    # Test that field IDs 1-9 are automatically decoded by Strategy B
+    # Field 1 (Account): Tag 10
+    # Field 101 (UID): Tag (101 << 3 | 2) = 810
+    uid_val = b"9999"
+    acc_payload = b"\xaa\x06" + encode_varint(len(uid_val)) + uid_val
+    full_payload = b"\x0a" + encode_varint(len(acc_payload)) + acc_payload
+
+    decoded = decode_response(full_payload)
+    assert isinstance(decoded[1], dict)
+    assert decoded[1][101] == uid_val
 
 def test_rank_translation():
     from config.ranks import get_rank_name
     assert get_rank_name(601) == "Heroic"
     assert get_rank_name(101) == "Bronze I"
     assert get_rank_name(None) == "Unknown"
+
+def test_decode_error_handling():
+    from api.errors import FFError, ErrorCode
+    # Test with invalid encrypted data (should trigger FM-04 detection if logic allows)
+    # FM-04: AES Decryption failure
+    with pytest.raises(FFError) as excinfo:
+        decode_player_data(b"too-short")
+    assert excinfo.value.code == ErrorCode.DECODE_ERROR
+    assert excinfo.value.extra is not None
+    assert excinfo.value.extra.get("possible_key_rotation") is True

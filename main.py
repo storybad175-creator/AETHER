@@ -40,9 +40,25 @@ app.include_router(router)
 
 if __name__ == "__main__":
     import sys
+    import socket
+
     port = settings.SERVER_PORT
     if len(sys.argv) > 1 and sys.argv[1] == "--port":
         port = int(sys.argv[2])
 
-    logger.info(f"API Banner: OB53 UNLIMITED - Active Regions: 14")
+    # FM-09: Port Conflict Resolution
+    max_retries = 5
+    for attempt in range(max_retries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", port))
+                break # Port is available
+            except OSError:
+                logger.warning(f"Port {port} is occupied. Trying {port + 1}...")
+                port += 1
+    else:
+        logger.error(f"Could not find an available port after {max_retries} attempts.")
+        sys.exit(1)
+
+    logger.info(f"API Banner: {settings.OB_VERSION} UNLIMITED - Active Regions: 14")
     uvicorn.run(app, host="0.0.0.0", port=port)

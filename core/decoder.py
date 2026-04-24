@@ -3,9 +3,15 @@ import logging
 from typing import Any, Dict, Optional, Union
 from core.crypto import aes_decrypt
 from core.proto import decode_response
-from api.schemas import PlayerData
+from api.schemas import (
+    PlayerData, AccountInfo, ModeRankInfo, StatsInfo,
+    SocialInfo, PetInfo, CosmeticsInfo, PassInfo,
+    CreditInfo, BanInfo
+)
 from config.ranks import get_rank_name
 from api.errors import FFError, ErrorCode
+
+logger = logging.getLogger(__name__)
 
 def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
@@ -14,16 +20,38 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     try:
         # Step 1: AES Decrypt
-        decrypted_bytes = aes_decrypt(raw_encrypted)
+        try:
+            decrypted_bytes = aes_decrypt(raw_encrypted)
+        except Exception as e:
+            logger.error(f"AES Decryption failed: {e}")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Failed to decrypt response. AES keys might be invalid.",
+                extra={"possible_key_rotation": True}
+            )
 
         # Step 2: Protobuf Decode (Top level)
         # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
-        raw_msg = decode_response(decrypted_bytes)
+        try:
+            raw_msg = decode_response(decrypted_bytes)
+            if not raw_msg:
+                raise ValueError("Empty protobuf message")
+        except Exception as e:
+            logger.error(f"Protobuf decoding failed: {e}")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Failed to parse protobuf. Possible AES key rotation.",
+                extra={"possible_key_rotation": True, "details": str(e)}
+            )
 
         def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
+            if not isinstance(data, dict):
+                return default
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
+            if isinstance(data, dict):
+                return data
             if isinstance(data, bytes):
                 return decode_response(data)
             return {}
@@ -80,8 +108,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # 3: Stats
         stats_raw = decode_nested(safe_get(raw_msg, 3))
 
-        def parse_stat_line(data_bytes: bytes) -> Dict[str, Any]:
-            d = decode_response(data_bytes)
+        def parse_stat_line(data_bytes: Union[bytes, dict]) -> Dict[str, Any]:
+            d = decode_nested(data_bytes)
             m = safe_get(d, 401, 0)
             w = safe_get(d, 402, 0)
             k = safe_get(d, 403, 0)
@@ -103,16 +131,16 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
 
         stats = {
             "battle_royale": {
-                "solo": parse_stat_line(safe_get(stats_raw, 301, b"")),
-                "duo": parse_stat_line(safe_get(stats_raw, 302, b"")),
-                "squad": parse_stat_line(safe_get(stats_raw, 303, b""))
+                "solo": parse_stat_line(safe_get(stats_raw, 301, {})),
+                "duo": parse_stat_line(safe_get(stats_raw, 302, {})),
+                "squad": parse_stat_line(safe_get(stats_raw, 303, {}))
             },
             "clash_squad": {
                 "ranked": {
-                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 401, 0),
-                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 402, 0),
+                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 401, 0),
+                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 402, 0),
                     "win_rate": "0.00%", # Computed by Pydantic or manually if needed
-                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 403, 0),
+                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 403, 0),
                     "kd_ratio": 0.0
                 }
             }
@@ -197,18 +225,20 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         }
 
         return PlayerData(
-            account=account,
-            rank=rank,
-            stats=stats,
-            social=social,
-            pet=pet,
-            cosmetics=cosmetics,
-            pass_info=pass_info,
-            credit=credit,
-            ban=ban
+            account=AccountInfo(**account),
+            rank=ModeRankInfo(**rank),
+            stats=StatsInfo(**stats),
+            social=SocialInfo(**social),
+            pet=PetInfo(**pet) if pet else None,
+            cosmetics=CosmeticsInfo(**cosmetics),
+            pass_info=PassInfo(**pass_info),
+            credit=CreditInfo(**credit),
+            ban=BanInfo(**ban)
         )
 
     except Exception as e:
+        if isinstance(e, FFError):
+            raise
         logger.exception("Decoding error")
         raise FFError(
             ErrorCode.DECODE_ERROR,

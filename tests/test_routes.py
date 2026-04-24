@@ -22,3 +22,17 @@ async def test_player_invalid_uid():
         response = await ac.get("/player?uid=123&region=IND")
     assert response.status_code == 400
     assert "INVALID_INPUT" in response.text
+
+@pytest.mark.asyncio
+async def test_batch_endpoint_partial_failure():
+    # One valid UID (mocked), one invalid
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.get("/batch?uids=4899748638,123&region=IND")
+
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 2
+
+    # Second result should have an error (INVALID_INPUT or INVALID_UID)
+    assert results[1]["error"] is not None
+    assert results[1]["error"]["code"] in ["INVALID_INPUT", "INVALID_UID"]
