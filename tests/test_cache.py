@@ -38,3 +38,22 @@ async def test_cache_eviction():
         assert cache.get("1", "IND") is None
         assert cache.get("2", "IND") is None
         assert cache.get("3", "IND") is not None
+
+@pytest.mark.asyncio
+async def test_cache_stampede_prevention():
+    cache = TTLCache()
+    uid, region = "stampede", "IND"
+
+    lock1 = await cache.get_lock(uid, region)
+    lock2 = await cache.get_lock(uid, region)
+
+    assert lock1 is lock2 # Same object
+
+    async with lock1:
+        # Simulate work
+        await asyncio.sleep(0.1)
+        cache.set(uid, region, "data")
+
+    async with lock2:
+        # Should get data immediately
+        assert cache.get(uid, region) == "data"

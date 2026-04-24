@@ -64,7 +64,10 @@ class AsyncTransport:
                         raise FFError(ErrorCode.AUTH_FAILED, "Authentication failed after refresh.")
 
                     if resp.status == 404:
-                        raise FFError(ErrorCode.PLAYER_NOT_FOUND, "Player UID not found in this region.")
+                        raise FFError(
+                            ErrorCode.PLAYER_NOT_FOUND,
+                            "Player UID not found in this region. Player may exist in another region. Try: SG, IND, BR, ID."
+                        )
 
                     if resp.status == 429:
                         retry_after = int(resp.headers.get("Retry-After", 10))

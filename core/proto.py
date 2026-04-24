@@ -77,10 +77,16 @@ def decode_response_raw(data: bytes) -> Dict[int, Any]:
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
+            # Strategy B: Recursively decode if it's a known nested message type (field IDs 1-9)
+            if 1 <= field_id <= 9:
+                try:
+                    val = decode_response_raw(val)
+                except Exception:
+                    # If decoding fails, keep it as raw bytes (might be a string)
+                    pass
+
+            # Handle repeated fields
             if field_id in result:
-                # Handle repeated fields
                 if not isinstance(result[field_id], list):
                     result[field_id] = [result[field_id]]
                 result[field_id].append(val)
@@ -110,6 +116,8 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
 
     return encode_request_raw(uid, region, version)
 
-def decode_response(data: bytes) -> Dict[int, Any]:
+def decode_response(data: Union[bytes, Dict[int, Any]]) -> Dict[int, Any]:
     """Entry point for decoding player responses."""
+    if isinstance(data, dict):
+        return data
     return decode_response_raw(data)

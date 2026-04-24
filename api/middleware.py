@@ -24,8 +24,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task = None
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -42,6 +41,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        if self._cleanup_task is None:
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
