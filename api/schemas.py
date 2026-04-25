@@ -98,9 +98,12 @@ class CSRankedStats(BaseModel):
     kills: int = 0
     kd_ratio: float = 0.0
 
+class ModeCSRankedStats(BaseModel):
+    ranked: CSRankedStats
+
 class StatsInfo(BaseModel):
     battle_royale: BRStats
-    clash_squad: dict[str, CSRankedStats]
+    clash_squad: ModeCSRankedStats
 
 class GuildLeader(BaseModel):
     uid: str
