@@ -11,6 +11,20 @@ class Settings(BaseSettings):
     GARENA_GUEST_TOKEN: str = Field(default="your_guest_token_here")
 
     # AES crypto constants (Hex strings)
+    # ── AES CRYPTO CONSTANTS ──────────────────────────────────────────
+    # These constants are community-extracted from the Free Fire APK
+    # binary analysis. Specifically, they are typically found within
+    # the native libraries (libil2cpp.so or libunity.so) using tools
+    # like Ghidra, IDA Pro, or strings analysis.
+    #
+    # Methodology:
+    # 1. Decompile APK using apktool.
+    # 2. Locate libil2cpp.so in the lib/ directory.
+    # 3. Use Frida to hook network calls or static analysis to find
+    #    the encryption routine.
+    # 4. Update these values in your .env file when a new OB version
+    #    rotates the keys.
+    # ──────────────────────────────────────────────────────────────────
     AES_KEY: str = Field(default="your_32_byte_hex_key_here")
     AES_IV: str = Field(default="your_16_byte_hex_iv_here")
 

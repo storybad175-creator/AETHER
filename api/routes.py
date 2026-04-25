@@ -23,8 +23,47 @@ async def get_players_batch(
     region: str = Query(..., description="Region code")
 ):
     """Fetches multiple players concurrently (max 10)."""
+    from api.schemas import PlayerRequest, ResponseMetadata, ErrorDetail
+    from api.errors import FFError, ErrorCode
+
     uid_list = [uid.strip() for uid in uids.split(",") if uid.strip()][:10]
-    tasks = [fetch_player(uid, region) for uid in uid_list]
+
+    async def safe_fetch(uid: str, region: str) -> PlayerResponse:
+        try:
+            # Re-validate individually to catch format errors per UID
+            PlayerRequest(uid=uid, region=region)
+            return await fetch_player(uid, region)
+        except Exception as e:
+            code = ErrorCode.SERVICE_UNAVAILABLE
+            retryable = True
+            extra = None
+            if isinstance(e, FFError):
+                code = e.code
+                retryable = e.retryable
+                extra = e.extra
+            elif isinstance(e, ValueError):
+                code = ErrorCode.INVALID_UID
+                retryable = False
+
+            return PlayerResponse(
+                metadata=ResponseMetadata(
+                    request_uid=uid,
+                    request_region=region,
+                    fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    response_time_ms=0,
+                    api_version=settings.OB_VERSION,
+                    cache_hit=False
+                ),
+                data=None,
+                error=ErrorDetail(
+                    code=code,
+                    message=str(e),
+                    retryable=retryable,
+                    extra=extra
+                )
+            )
+
+    tasks = [safe_fetch(uid, region) for uid in uid_list]
     return await asyncio.gather(*tasks)
 
 @router.get("/health")

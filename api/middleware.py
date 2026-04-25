@@ -90,12 +90,20 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Determine specific error code
+        code = "INVALID_INPUT"
+        msg = exc.errors()[0]["msg"]
+        if "UID" in msg:
+            code = ErrorCode.INVALID_UID
+        elif "region" in msg:
+            code = ErrorCode.INVALID_REGION
+
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": msg,
                     "retryable": False
                 }
             }

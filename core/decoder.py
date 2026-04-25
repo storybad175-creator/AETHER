@@ -24,6 +24,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
+            if isinstance(data, dict):
+                return data
             if isinstance(data, bytes):
                 return decode_response(data)
             return {}
@@ -210,7 +212,22 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
 
     except Exception as e:
         logger.exception("Decoding error")
+        # FM-04: AES Key Rotation detection
+        extra = {}
+        if isinstance(e, (ValueError, struct.error)):
+            extra = {
+                "possible_key_rotation": True,
+                "action": "Update AES_KEY and AES_IV in .env"
+            }
+            print("\n" + "!" * 60)
+            print("WARNING: PROTOBUF DECODE FAILURE DETECTED!")
+            print("Decryption succeeded but the resulting data is malformed.")
+            print("This usually indicates an AES_KEY or AES_IV rotation by Garena.")
+            print("Please update AES_KEY and AES_IV in your .env file.")
+            print("!" * 60 + "\n")
+
         raise FFError(
             ErrorCode.DECODE_ERROR,
-            f"Failed to decode player data: {str(e)}"
+            f"Failed to decode player data: {str(e)}",
+            extra=extra
         )
