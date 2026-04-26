@@ -25,10 +25,9 @@ def test_proto_response_decode_nested():
 
     decoded = decode_response(outer_payload)
     assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
-
-    inner_decoded = decode_response(decoded[1])
-    assert inner_decoded[102] == nickname_val
+    # With recursive decoding, decoded[1] should be a dict
+    assert isinstance(decoded[1], dict)
+    assert decoded[1][102] == nickname_val
 
 def test_rank_translation():
     from config.ranks import get_rank_name
