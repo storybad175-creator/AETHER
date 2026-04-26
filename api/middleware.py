@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
@@ -24,31 +24,41 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._init_lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
-        while True:
-            await asyncio.sleep(300) # Every 5 minutes
-            now = time.time()
-            to_delete = []
-            for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
-                if not ts_list or now - ts_list[-1] > 300:
-                    to_delete.append(ip)
+        try:
+            while True:
+                await asyncio.sleep(300) # Every 5 minutes
+                now = time.time()
+                to_delete = []
+                for ip, ts_list in list(self.visits.items()):
+                    # If no requests in the last 5 minutes, consider inactive
+                    if not ts_list or now - ts_list[-1] > 300:
+                        to_delete.append(ip)
 
-            for ip in to_delete:
-                del self.visits[ip]
+                for ip in to_delete:
+                    self.visits.pop(ip, None)
+        except asyncio.CancelledError:
+            pass
 
     async def dispatch(self, request: Request, call_next):
+        # Thread-safe lazy initialization of cleanup task
+        if self._cleanup_task is None:
+            async with self._init_lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
         # Filter timestamps within the last 60 seconds
-        self.visits[client_ip] = [t for t in self.visits.get(client_ip, []) if now - t < 60]
+        ip_visits = [t for t in self.visits.get(client_ip, []) if now - t < 60]
+        self.visits[client_ip] = ip_visits
 
-        if len(self.visits[client_ip]) >= settings.RATE_LIMIT_RPM:
+        if len(ip_visits) >= settings.RATE_LIMIT_RPM:
             return JSONResponse(
                 status_code=429,
                 content={
@@ -90,12 +100,22 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Extract first error message
+        msg = exc.errors()[0]["msg"]
+
+        # Determine code based on field
+        code = "INVALID_INPUT"
+        if "uid" in str(exc.errors()):
+            code = "INVALID_UID"
+        elif "region" in str(exc.errors()):
+            code = "INVALID_REGION"
+
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": msg,
                     "retryable": False
                 }
             }

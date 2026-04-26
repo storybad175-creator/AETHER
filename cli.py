@@ -6,22 +6,38 @@ import logging
 from core.fetcher import fetch_player
 from config.regions import REGION_MAP
 from core.transport import transport
+from api.schemas import PlayerResponse
 
 # Disable logging for CLI unless requested
 logging.basicConfig(level=logging.ERROR)
 
-async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
+async def safe_fetch_cli(uid: str, region: str, semaphore: asyncio.Semaphore):
+    """Safely fetch player data with concurrency control."""
+    async with semaphore:
+        try:
+            return await fetch_player(uid, region)
+        except Exception as e:
+            return e
+
+async def run_batch(file_path: str, region: str, format_type: str):
+    """Processes a file containing UIDs concurrently and prints results."""
     try:
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        semaphore = asyncio.Semaphore(10) # Max 10 concurrent requests
+        tasks = [safe_fetch_cli(uid, region, semaphore) for uid in uids]
+
+        # Use gather to run them all
+        results = await asyncio.gather(*tasks)
+
+        indent = 2 if format_type == "pretty" else None
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                print(json.dumps({"uid": uids[i], "error": str(res)}), file=sys.stderr)
+            else:
+                print(res.model_dump_json(indent=indent))
+
     finally:
         await transport.close()
 
@@ -41,7 +57,6 @@ async def main():
         return
 
     if args.health:
-        # Mock health check for CLI
         print(json.dumps({"status": "ok", "interface": "CLI"}, indent=2))
         return
 
@@ -49,7 +64,7 @@ async def main():
         if not args.region:
             print("Error: --region is required for batch mode", file=sys.stderr)
             sys.exit(1)
-        await run_batch(args.batch, args.region)
+        await run_batch(args.batch, args.region, args.format)
         return
 
     if args.uid and args.region:
