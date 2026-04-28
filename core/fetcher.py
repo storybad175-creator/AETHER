@@ -20,16 +20,18 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
     """
     start_time = time.monotonic()
 
+    # Normalize input
+    uid = str(uid).strip()
+    region = region.upper().strip()
+
     # 1. Validation (Indirectly via PlayerRequest Pydantic model)
     try:
-        req = PlayerRequest(uid=uid, region=region)
-        uid = req.uid
-        region = req.region
+        PlayerRequest(uid=uid, region=region)
     except Exception as e:
-        # This will be caught by the outer try-except if not handled
-        raise
+        # Wrap validation errors into FFError
+        raise FFError(ErrorCode.INVALID_UID if "UID" in str(e) else ErrorCode.INVALID_REGION, str(e))
 
-    # 2. Cache Check
+    # 2. Cache Check (Immediate return on hit)
     cached_data = cache.get(uid, region)
     if cached_data:
         duration = int((time.monotonic() - start_time) * 1000)
@@ -45,10 +47,10 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             data=cached_data
         )
 
-    # 3. Lock per UID/Region to prevent stampede
+    # 3. Lock per UID/Region to prevent cache stampede
     lock = await cache.get_lock(uid, region)
     async with lock:
-        # Check again in case another coroutine filled it while we waited
+        # Re-check cache after acquiring lock
         cached_data = cache.get(uid, region)
         if cached_data:
             duration = int((time.monotonic() - start_time) * 1000)
@@ -100,5 +102,5 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             logger.exception(f"Unexpected error fetching player {uid} ({region})")
             raise FFError(
                 ErrorCode.SERVICE_UNAVAILABLE,
-                f"An unexpected error occurred: {str(e)}"
+                f"An unexpected internal error occurred: {str(e)}"
             )

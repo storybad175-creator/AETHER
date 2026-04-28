@@ -6,5 +6,7 @@ class PlayerResponse:
         pass
 
     def ParseFromString(self, data):
-        # Decoding is primarily handled by Strategy B in decoder.py
-        pass
+        # Strategy A fallback stub - the actual parsing is handled by Strategy B
+        # in core/proto.py when this is not a full compiled module.
+        from core.proto import decode_response_raw
+        return decode_response_raw(data)

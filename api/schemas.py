@@ -33,11 +33,15 @@ class ResponseMetadata(BaseModel):
     api_version: str
     cache_hit: bool
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
     retryable: bool
     extra: Optional[dict] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 # --- Player Data Sub-Models ---
 
@@ -60,19 +64,27 @@ class AccountInfo(BaseModel):
     last_login: Optional[str] = None
     account_type: str = "Normal"
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class RankInfo(BaseModel):
     rank_name: str
     rank_code: Optional[int] = None
     points: Optional[int] = None
     visible: bool = True
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class BRRankInfo(RankInfo):
     max_rank_name: Optional[str] = None
     max_rank_code: Optional[int] = None
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class ModeRankInfo(BaseModel):
     battle_royale: BRRankInfo
     clash_squad: RankInfo
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class StatLine(BaseModel):
     matches: int = 0
@@ -80,33 +92,43 @@ class StatLine(BaseModel):
     win_rate: str = "0.00%"
     kills: int = 0
     deaths: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
     headshots: int = 0
     headshot_rate: str = "0.00%"
-    avg_damage_per_match: float = 0.0
+    avg_damage_per_match: Annotated[float, Field(ge=0.0)] = 0.0
     booyahs: int = 0
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class BRStats(BaseModel):
     solo: StatLine
     duo: StatLine
     squad: StatLine
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class CSRankedStats(BaseModel):
     matches: int = 0
     wins: int = 0
     win_rate: str = "0.00%"
     kills: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class StatsInfo(BaseModel):
     battle_royale: BRStats
     clash_squad: dict[str, CSRankedStats]
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class GuildLeader(BaseModel):
     uid: str
     nickname: Optional[str] = None
     level: Optional[int] = None
     rank_name: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class GuildInfo(BaseModel):
     id: str
@@ -116,8 +138,12 @@ class GuildInfo(BaseModel):
     capacity: Optional[int] = None
     leader: Optional[GuildLeader] = None
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class SocialInfo(BaseModel):
     guild: Optional[GuildInfo] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class PetInfo(BaseModel):
     name: Optional[str] = None
@@ -127,6 +153,8 @@ class PetInfo(BaseModel):
     skin_id: Optional[int] = None
     is_selected: bool = False
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class CosmeticsInfo(BaseModel):
     avatar_id: Optional[int] = None
     banner_id: Optional[int] = None
@@ -135,20 +163,28 @@ class CosmeticsInfo(BaseModel):
     equipped_outfit_ids: List[int] = []
     equipped_weapon_skin_ids: List[int] = []
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class PassInfo(BaseModel):
     booyah_pass_level: Optional[int] = None
     fire_pass_status: str = "Basic"
     fire_pass_badge_count: Optional[int] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 class CreditInfo(BaseModel):
     score: Optional[int] = None
     reward_claimed: bool = False
     summary_period: Optional[str] = None
 
+    model_config = ConfigDict(populate_by_name=True)
+
 class BanInfo(BaseModel):
     is_banned: bool = False
     ban_period: Optional[str] = None
     ban_type: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 # --- Main Output Models ---
 
