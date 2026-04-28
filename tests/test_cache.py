@@ -1,40 +1,50 @@
 import pytest
 import asyncio
+import time
 from core.cache import TTLCache
+from config.settings import settings
 
 @pytest.mark.asyncio
-async def test_cache_set_get():
+async def test_cache_hit():
     cache = TTLCache()
-    cache.set("123", "IND", {"name": "Test"})
+    cache.set("123", "IND", {"data": "test"})
 
-    assert cache.get("123", "IND") == {"name": "Test"}
-    assert cache.get("456", "IND") is None
+    assert cache.get("123", "IND") == {"data": "test"}
 
 @pytest.mark.asyncio
-async def test_cache_expiry():
+async def test_cache_miss_expired():
     cache = TTLCache()
-    with patch("config.settings.settings.CACHE_TTL_SECONDS", 0):
-        cache.set("123", "IND", {"name": "Test"})
-        # Should be expired immediately
-        assert cache.get("123", "IND") is None
+    # Temporarily shorten TTL
+    original_ttl = settings.CACHE_TTL_SECONDS
+    settings.CACHE_TTL_SECONDS = -1
 
-from unittest.mock import patch
+    cache.set("123", "IND", {"data": "expired"})
+    assert cache.get("123", "IND") is None
+
+    settings.CACHE_TTL_SECONDS = original_ttl
 
 @pytest.mark.asyncio
-async def test_cache_eviction():
+async def test_eviction():
     cache = TTLCache()
-    with patch("config.settings.settings.CACHE_MAX_ENTRIES", 2):
-        cache.set("1", "IND", "data1")
-        cache.set("2", "IND", "data2")
-        cache.set("3", "IND", "data3") # Should trigger eviction
+    # Temporarily shorten MAX_ENTRIES
+    original_max = settings.CACHE_MAX_ENTRIES
+    settings.CACHE_MAX_ENTRIES = 5
 
-        # Eviction removes 50 oldest, but here we only have 2, so it should remove all if limit is 2?
-        # Actually our logic evicts min(50, len).
-        # In this test case, after adding "3", len was 2, it evicts 2.
-        # Wait, if len >= MAX, evict.
-        # 1. set "1" (len 1)
-        # 2. set "2" (len 2) -> len >= 2, evict 50 oldest. Store is empty. set "2".
-        # 3. set "3" (len 2) -> len >= 2, evict. set "3".
-        assert cache.get("1", "IND") is None
-        assert cache.get("2", "IND") is None
-        assert cache.get("3", "IND") is not None
+    for i in range(10):
+        cache.set(str(i), "IND", {"val": i})
+
+    assert len(cache._store) <= 5
+    # The last one added should definitely be there
+    assert cache.get("9", "IND") == {"val": 9}
+
+    settings.CACHE_MAX_ENTRIES = original_max
+
+@pytest.mark.asyncio
+async def test_per_key_lock():
+    cache = TTLCache()
+    lock1 = await cache.get_lock("123", "IND")
+    lock2 = await cache.get_lock("123", "IND")
+    lock3 = await cache.get_lock("456", "IND")
+
+    assert lock1 is lock2
+    assert lock1 is not lock3

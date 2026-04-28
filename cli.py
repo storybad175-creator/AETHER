@@ -6,22 +6,28 @@ import logging
 from core.fetcher import fetch_player
 from config.regions import REGION_MAP
 from core.transport import transport
+from api.schemas import PlayerResponse
 
 # Disable logging for CLI unless requested
 logging.basicConfig(level=logging.ERROR)
 
 async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
+    """Processes a file containing UIDs concurrently (max 10)."""
     try:
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        # Process in chunks of 10 to respect concurrency limits
+        for i in range(0, len(uids), 10):
+            chunk = uids[i:i+10]
+            tasks = [fetch_player(uid, region) for uid in chunk]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for res in results:
+                if isinstance(res, Exception):
+                    print(json.dumps({"error": str(res)}), file=sys.stderr)
+                else:
+                    print(res.model_dump_json())
     finally:
         await transport.close()
 
@@ -41,7 +47,6 @@ async def main():
         return
 
     if args.health:
-        # Mock health check for CLI
         print(json.dumps({"status": "ok", "interface": "CLI"}, indent=2))
         return
 
@@ -58,7 +63,11 @@ async def main():
             indent = 2 if args.format == "pretty" else None
             print(result.model_dump_json(indent=indent))
         except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
+            # We want errors to be returned as valid JSON in CLI too for consistency
+            if hasattr(e, 'code'):
+                print(json.dumps({"error": {"code": getattr(e, 'code'), "message": str(e)}}, indent=2), file=sys.stderr)
+            else:
+                print(json.dumps({"error": str(e)}, indent=2), file=sys.stderr)
             sys.exit(1)
         finally:
             await transport.close()

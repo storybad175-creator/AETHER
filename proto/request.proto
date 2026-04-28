@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+package freefire;
+
 message PlayerRequest {
   string uid = 1;
   string region = 2;

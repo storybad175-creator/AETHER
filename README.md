@@ -1,71 +1,78 @@
 # Free Fire UID Verification API — APEX v3.0 UNLIMITED
 
-A high-performance, asynchronous Python API and CLI for fetching comprehensive player data across all 14 Garena regions. Optimized for OB53 (April 2026).
+The gold standard multi-region player data fetching API for Free Fire. Supporting all 14 official Garena regions with full Protobuf serialization and AES-CBC encryption.
 
-## Features
+## 🚀 Features
 
-- **All 14 Regions Supported**: IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, NA.
-- **Deep Data Retrieval**: Account info, BR/CS ranks, detailed stats (Solo/Duo/Squad), Guild info, Pet details, equipped cosmetics, and ban status.
-- **Robust Architecture**:
-  - AES-CBC payload encryption/decryption.
-  - Dual Protobuf strategy (Compiled / Raw Binary fallback).
-  - JWT lifecycle management with auto-refresh.
-  - TTL In-memory cache with LRU eviction.
-  - Exponential backoff and retry logic.
-- **Dual Interface**: FastAPI web server and a powerful CLI.
+- **All 14 Regions Supported:** IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, NA.
+- **OB53 Ready:** Optimized for the April 2026 update.
+- **Full Data Coverage:** Account info, ranks, stats, guild, pet, cosmetics, and ban status.
+- **Advanced Core:** Recursive Protobuf Strategy B parser + AES-CBC crypto.
+- **Production Ready:** JWT auto-refresh, exponential backoff, TTL LRU cache, and rate limiting.
+- **Dual Interface:** FastAPI Web Server + argparse CLI.
+- **Low RAM Optimized:** Runs on Termux, shared hosting, and 1GB RAM devices.
 
-## Installation
+## 🛠️ Installation
 
-### Standard Setup
 ```bash
-git clone https://github.com/your-repo/ff-api.git
-cd ff-api
+# Clone the repository
+git clone https://github.com/your-repo/ff-uid-api.git
+cd ff-uid-api
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Setup environment variables
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your credentials (see below)
 ```
 
-### Termux (Android)
+## 🔑 Configuration
+
+Edit the `.env` file with the following mandatory values:
+
+### Garena Guest Credentials
+Garena uses JWT tokens for authentication. You can extract guest credentials from a real Free Fire client using tools like Frida or by sniffing HTTPS traffic to `https://loginbp.ggblueshark.com/MajorLogin`.
+
+- `GARENA_GUEST_UID`: Your extracted guest account UID.
+- `GARENA_GUEST_TOKEN`: Your extracted guest account token.
+
+### AES Constants
+These are rotated by Garena occasionally (usually every major OB update).
+- `AES_KEY`: 32-byte hex string.
+- `AES_IV`: 16-byte hex string.
+
+## 🖥️ Usage
+
+### Web Server (FastAPI)
 ```bash
-pkg update && pkg upgrade
-pkg install python rust binutils
-pip install -r requirements.txt
-```
-
-## Configuration (.env)
-
-1. **Garena Guest Credentials**: Use Frida or a proxy (like Burp/Proxyman) to capture the `MajorLogin` request from the Free Fire app to get your guest UID and Token.
-2. **AES Constants**: Key and IV are extracted from the APK's native libraries (`libil2cpp.so` or `libunity.so`).
-3. **OB Version**: Update `OB_VERSION` in `.env` when a new game update is released.
-
-## Usage
-
-### Web Server
-```bash
+# Start the server
 python main.py --port 8080
 ```
-Endpoints:
-- `GET /player?uid={uid}&region={region}`
-- `GET /batch?uids={u1,u2}&region={region}`
-- `GET /health`
-- `GET /regions`
+- **Endpoints:**
+  - `GET /player?uid={UID}&region={REG}`: Fetch single player.
+  - `GET /batch?uids={U1,U2}&region={REG}`: Fetch up to 10 players.
+  - `GET /health`: System status.
+  - `GET /regions`: List all 14 regions.
 
 ### CLI
 ```bash
-# Single lookup
-python cli.py --uid 123456789 --region IND
+# Single UID
+python cli.py --uid 1234567890 --region IND
 
-# Batch lookup from file
+# Batch from file
 python cli.py --batch uids.txt --region SG
 
 # List regions
 python cli.py --regions
 ```
 
-## Testing
+## 🧪 Testing
+
 ```bash
+# Run the test suite
 pytest
 ```
 
-## Disclaimer
-This project is for educational and research purposes only. Use responsibly and respect Garena's Terms of Service.
+## 📜 License
+Definitive implementation for community educational purposes. Use responsibly.

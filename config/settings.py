@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     GARENA_GUEST_TOKEN: str = Field(default="your_guest_token_here")
 
     # AES crypto constants (Hex strings)
+    # These must be updated when Garena rotates keys in new OB updates
     AES_KEY: str = Field(default="your_32_byte_hex_key_here")
     AES_IV: str = Field(default="your_16_byte_hex_iv_here")
 
@@ -32,4 +33,5 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+# Centralized singleton instance
 settings = Settings()
