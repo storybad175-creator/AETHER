@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
@@ -24,8 +24,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._init_lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -42,6 +42,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        # Lazy initialization of cleanup task
+        if self._cleanup_task is None:
+            async with self._init_lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
@@ -90,11 +96,17 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Map ValidationError to more granular codes based on context
+        err_msg = str(exc)
+        code = ErrorCode.INVALID_UID if "uid" in err_msg.lower() else \
+               ErrorCode.INVALID_REGION if "region" in err_msg.lower() else \
+               "INVALID_INPUT"
+
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
+                    "code": code,
                     "message": exc.errors()[0]["msg"],
                     "retryable": False
                 }
