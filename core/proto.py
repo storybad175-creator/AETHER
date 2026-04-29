@@ -33,6 +33,8 @@ def decode_varint(data: bytes, pos: int) -> tuple[int, int]:
     result = 0
     shift = 0
     while True:
+        if pos >= len(data):
+            raise IndexError("Varint decoding reached end of data")
         b = data[pos]
         result |= (b & 0x7F) << shift
         pos += 1
@@ -53,44 +55,62 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Recursively decodes identified nested message fields.
     """
     result = {}
     pos = 0
+
+    # Message-type field IDs that should be recursively decoded (Strategy B)
+    # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
+    # 301-304: Stat lines (solo, duo, squad, cs_ranked)
+    NESTED_FIELDS = set(range(1, 10)) | set(range(301, 305))
+
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
-        except IndexError:
-            break # Reached end of data
+        except (IndexError, ValueError):
+            break
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
-        if wire_type == 0: # Varint
-            val, pos = decode_varint(data, pos)
-            result[field_id] = val
-        elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
-            pos += 8
-        elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
-            length, pos = decode_varint(data, pos)
-            val = data[pos:pos+length]
-            pos += length
+        val: Any = None
+        try:
+            if wire_type == 0: # Varint
+                val, pos = decode_varint(data, pos)
+            elif wire_type == 1: # 64-bit
+                if pos + 8 > len(data): break
+                val = struct.unpack("<Q", data[pos:pos+8])[0]
+                pos += 8
+            elif wire_type == 2: # Length-delimited
+                length, pos = decode_varint(data, pos)
+                if pos + length > len(data): break
+                val = data[pos:pos+length]
+                pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
+                # Recursive decoding for identified nested fields
+                if field_id in NESTED_FIELDS:
+                    try:
+                        val = decode_response_raw(val)
+                    except Exception:
+                        pass # Keep as raw bytes if recursive decoding fails
+            elif wire_type == 5: # 32-bit
+                if pos + 4 > len(data): break
+                val = struct.unpack("<I", data[pos:pos+4])[0]
+                pos += 4
             else:
-                result[field_id] = val
-        elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
-            pos += 4
+                # Unknown wire type, potentially corrupted or unsupported
+                break
+        except (IndexError, struct.error):
+            break
+
+        if field_id in result:
+            # Handle repeated fields by consolidating into a list
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            result[field_id] = val
 
     return result
 
@@ -110,6 +130,13 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
 
     return encode_request_raw(uid, region, version)
 
-def decode_response(data: bytes) -> Dict[int, Any]:
-    """Entry point for decoding player responses."""
-    return decode_response_raw(data)
+def decode_response(data: Union[bytes, Dict[int, Any]]) -> Dict[int, Any]:
+    """
+    Entry point for decoding player responses.
+    Accepts raw bytes or an already decoded dict to maintain consistency.
+    """
+    if isinstance(data, dict):
+        return data
+    if not isinstance(data, (bytes, bytearray)) or not data:
+        return {}
+    return decode_response_raw(bytes(data))

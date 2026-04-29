@@ -7,6 +7,8 @@ from api.schemas import PlayerData
 from config.ranks import get_rank_name
 from api.errors import FFError, ErrorCode
 
+logger = logging.getLogger(__name__)
+
 def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     Decrypts, decodes, and maps raw Garena response bytes to a PlayerData model.
@@ -14,17 +16,36 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     try:
         # Step 1: AES Decrypt
-        decrypted_bytes = aes_decrypt(raw_encrypted)
+        try:
+            decrypted_bytes = aes_decrypt(raw_encrypted)
+        except Exception as e:
+            logger.error(f"AES Decryption failed: {e}")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Decryption failed. This often indicates an invalid AES_KEY or AES_IV.",
+                extra={"possible_key_rotation": True, "action": "Update AES_KEY and AES_IV in .env"}
+            )
 
         # Step 2: Protobuf Decode (Top level)
         # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
         raw_msg = decode_response(decrypted_bytes)
 
+        if not raw_msg:
+            logger.error("Protobuf decoding yielded an empty dictionary.")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Protobuf decoding failed or returned no data. Check your AES keys.",
+                extra={"possible_key_rotation": True}
+            )
+
         def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
-            if isinstance(data, bytes):
+            """Handles both dict (pre-decoded by Strategy B) and raw bytes."""
+            if isinstance(data, dict):
+                return data
+            if isinstance(data, bytes) and data:
                 return decode_response(data)
             return {}
 
@@ -80,8 +101,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # 3: Stats
         stats_raw = decode_nested(safe_get(raw_msg, 3))
 
-        def parse_stat_line(data_bytes: bytes) -> Dict[str, Any]:
-            d = decode_response(data_bytes)
+        def parse_stat_line(data: Any) -> Dict[str, Any]:
+            d = decode_nested(data)
             m = safe_get(d, 401, 0)
             w = safe_get(d, 402, 0)
             k = safe_get(d, 403, 0)
@@ -103,16 +124,16 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
 
         stats = {
             "battle_royale": {
-                "solo": parse_stat_line(safe_get(stats_raw, 301, b"")),
-                "duo": parse_stat_line(safe_get(stats_raw, 302, b"")),
-                "squad": parse_stat_line(safe_get(stats_raw, 303, b""))
+                "solo": parse_stat_line(safe_get(stats_raw, 301, {})),
+                "duo": parse_stat_line(safe_get(stats_raw, 302, {})),
+                "squad": parse_stat_line(safe_get(stats_raw, 303, {}))
             },
             "clash_squad": {
                 "ranked": {
-                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 401, 0),
-                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 402, 0),
-                    "win_rate": "0.00%", # Computed by Pydantic or manually if needed
-                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 403, 0),
+                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 401, 0),
+                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 402, 0),
+                    "win_rate": "0.00%",
+                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, {})), 403, 0),
                     "kd_ratio": 0.0
                 }
             }
@@ -120,7 +141,7 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # Correct CS ranked win rate and KD
         cs_r = stats["clash_squad"]["ranked"]
         cs_r["win_rate"] = f"{(cs_r['wins'] / max(cs_r['matches'], 1) * 100):.2f}%"
-        cs_r["kd_ratio"] = round(cs_r["kills"] / max(cs_r["matches"] - cs_r["wins"], 1), 2)
+        cs_r["kd_ratio"] = round(cs_r['kills'] / max(cs_r['matches'] - cs_r['wins'], 1), 2)
 
         # 4: Social
         social_raw = decode_nested(safe_get(raw_msg, 4))
@@ -160,7 +181,7 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             if isinstance(data, list):
                 return [int.from_bytes(x, 'little') if isinstance(x, bytes) else x for x in data]
             if isinstance(data, bytes):
-                return [int.from_bytes(data, 'little')] # Simplified
+                return [int.from_bytes(data, 'little')]
             return []
 
         cosmetics = {
@@ -208,6 +229,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             ban=ban
         )
 
+    except FFError:
+        raise
     except Exception as e:
         logger.exception("Decoding error")
         raise FFError(

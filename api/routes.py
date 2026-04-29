@@ -1,13 +1,51 @@
 import asyncio
 import time
 from fastapi import APIRouter, Query
-from typing import List, Optional
+from typing import List, Optional, Any
 from core.fetcher import fetch_player
-from api.schemas import PlayerResponse
+from api.schemas import PlayerResponse, PlayerRequest, ResponseMetadata, ErrorDetail
 from config.regions import REGION_MAP
 from config.settings import settings
+from api.errors import FFError, ErrorCode, ERROR_HTTP_MAP
+from pydantic import ValidationError
 
 router = APIRouter()
+
+def create_error_response(uid: str, region: str, code: str, message: str, retryable: bool = False, extra: Optional[dict] = None) -> PlayerResponse:
+    """Helper to create a PlayerResponse with error details."""
+    return PlayerResponse(
+        metadata=ResponseMetadata(
+            request_uid=uid,
+            request_region=region,
+            fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            response_time_ms=0,
+            api_version=settings.OB_VERSION,
+            cache_hit=False
+        ),
+        error=ErrorDetail(
+            code=code,
+            message=message,
+            retryable=retryable,
+            extra=extra
+        )
+    )
+
+async def safe_fetch(uid: str, region: str) -> PlayerResponse:
+    """
+    Safely fetches a player, converting exceptions into PlayerResponse objects.
+    Useful for batch operations where one failure shouldn't abort the entire list.
+    """
+    try:
+        # Validate request first
+        PlayerRequest(uid=uid, region=region)
+        return await fetch_player(uid, region)
+    except FFError as e:
+        return create_error_response(uid, region, e.code, e.message, e.retryable, e.extra)
+    except ValidationError as e:
+        code = ErrorCode.INVALID_UID if "UID" in str(e) else ErrorCode.INVALID_REGION
+        return create_error_response(uid, region, code, e.errors()[0]["msg"])
+    except Exception as e:
+        return create_error_response(uid, region, ErrorCode.SERVICE_UNAVAILABLE, str(e))
 
 @router.get("/player", response_model=PlayerResponse)
 async def get_player(
@@ -22,9 +60,9 @@ async def get_players_batch(
     uids: str = Query(..., description="Comma-separated list of UIDs"),
     region: str = Query(..., description="Region code")
 ):
-    """Fetches multiple players concurrently (max 10)."""
+    """Fetches multiple players concurrently (max 10) using safe_fetch."""
     uid_list = [uid.strip() for uid in uids.split(",") if uid.strip()][:10]
-    tasks = [fetch_player(uid, region) for uid in uid_list]
+    tasks = [safe_fetch(uid, region) for uid in uid_list]
     return await asyncio.gather(*tasks)
 
 @router.get("/health")
