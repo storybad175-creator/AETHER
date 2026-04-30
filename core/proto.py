@@ -13,6 +13,9 @@ except (ImportError, AttributeError):
     HAS_COMPILED = False
     logger.info("Protoc compiled modules not found. Using raw Strategy B parser.")
 
+# Fields identified as nested messages in Garena protocol
+NESTED_FIELDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 301, 302, 303, 304}
+
 # --- Strategy B: Raw Protobuf Parser ---
 
 def encode_varint(value: int) -> bytes:
@@ -53,44 +56,57 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Recursive implementation that automatically handles nested messages
+    and repeated fields.
     """
     result = {}
     pos = 0
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
-        except IndexError:
-            break # Reached end of data
+        except (IndexError, struct.error):
+            break # Reached end of data or malformed tag
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
-        if wire_type == 0: # Varint
-            val, pos = decode_varint(data, pos)
-            result[field_id] = val
-        elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
-            pos += 8
-        elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
-            length, pos = decode_varint(data, pos)
-            val = data[pos:pos+length]
-            pos += length
+        val = None
+        try:
+            if wire_type == 0: # Varint
+                val, pos = decode_varint(data, pos)
+            elif wire_type == 1: # 64-bit
+                val = struct.unpack("<Q", data[pos:pos+8])[0]
+                pos += 8
+            elif wire_type == 2: # Length-delimited
+                length, pos = decode_varint(data, pos)
+                val = data[pos:pos+length]
+                pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
+                # Recursively decode nested messages if identified as such
+                if field_id in NESTED_FIELDS and len(val) > 0:
+                    try:
+                        nested_val = decode_response_raw(val)
+                        if nested_val: # Only use if it actually decoded something
+                            val = nested_val
+                    except Exception:
+                        pass # Keep as raw bytes if recursive decode fails
+            elif wire_type == 5: # 32-bit
+                val = struct.unpack("<I", data[pos:pos+4])[0]
+                pos += 4
             else:
-                result[field_id] = val
-        elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
-            pos += 4
+                # Unknown wire type, skip or raise? We'll skip for robustness
+                logger.debug(f"Unknown wire type {wire_type} for field {field_id}")
+                break
+        except (IndexError, struct.error):
+            break
+
+        # Handle repeated fields by storing them in a list
+        if field_id in result:
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            result[field_id] = val
 
     return result
 
@@ -110,6 +126,8 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
 
     return encode_request_raw(uid, region, version)
 
-def decode_response(data: bytes) -> Dict[int, Any]:
+def decode_response(data: bytes) -> Union[Dict[int, Any], bytes]:
     """Entry point for decoding player responses."""
+    if not data:
+        return {}
     return decode_response_raw(data)

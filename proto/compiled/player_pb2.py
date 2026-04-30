@@ -3,8 +3,16 @@
 
 class PlayerResponse:
     def __init__(self):
-        pass
+        self.account = None
+        self.rank = None
+        self.stats = None
 
     def ParseFromString(self, data):
-        # Decoding is primarily handled by Strategy B in decoder.py
-        pass
+        """Minimal implementation that delegates to the raw decoder."""
+        from core.proto import decode_response
+        decoded = decode_response(data)
+        if isinstance(decoded, dict):
+            # This is a stub, we don't fully map to object attributes here
+            # since Strategy B is the primary path.
+            pass
+        return self
