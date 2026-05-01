@@ -6,9 +6,33 @@ import logging
 from core.fetcher import fetch_player
 from config.regions import REGION_MAP
 from core.transport import transport
+from api.errors import FFError
 
 # Disable logging for CLI unless requested
 logging.basicConfig(level=logging.ERROR)
+
+async def safe_fetch_cli(uid: str, region: str):
+    """Wraps fetch_player for CLI usage with error handling."""
+    try:
+        result = await fetch_player(uid, region)
+        return result.model_dump()
+    except FFError as e:
+        return {
+            "uid": uid,
+            "error": {
+                "code": e.code,
+                "message": e.message,
+                "extra": e.extra
+            }
+        }
+    except Exception as e:
+        return {
+            "uid": uid,
+            "error": {
+                "code": "UNKNOWN_ERROR",
+                "message": str(e)
+            }
+        }
 
 async def run_batch(file_path: str, region: str):
     """Processes a file containing UIDs and prints results as JSONL."""
@@ -16,12 +40,22 @@ async def run_batch(file_path: str, region: str):
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        # Concurrency limit of 10 for batch processing
+        semaphore = asyncio.Semaphore(10)
+
+        async def limited_fetch(uid):
+            async with semaphore:
+                return await safe_fetch_cli(uid, region)
+
+        tasks = [limited_fetch(uid) for uid in uids]
+        results = await asyncio.gather(*tasks)
+
+        for res in results:
+            print(json.dumps(res))
+
+    except FileNotFoundError:
+        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
     finally:
         await transport.close()
 
@@ -41,7 +75,6 @@ async def main():
         return
 
     if args.health:
-        # Mock health check for CLI
         print(json.dumps({"status": "ok", "interface": "CLI"}, indent=2))
         return
 
@@ -54,12 +87,9 @@ async def main():
 
     if args.uid and args.region:
         try:
-            result = await fetch_player(args.uid, args.region)
+            result = await safe_fetch_cli(args.uid, args.region)
             indent = 2 if args.format == "pretty" else None
-            print(result.model_dump_json(indent=indent))
-        except Exception as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
+            print(json.dumps(result, indent=indent))
         finally:
             await transport.close()
     else:

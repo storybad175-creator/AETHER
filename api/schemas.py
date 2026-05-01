@@ -1,6 +1,9 @@
-from typing import Optional, List, Annotated, Union
+from typing import Optional, List, Annotated, Dict, Any
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from config.regions import REGION_MAP
+
+# --- Common Config ---
+MODEL_CONFIG = ConfigDict(populate_by_name=True)
 
 # --- Input Models ---
 
@@ -23,6 +26,8 @@ class PlayerRequest(BaseModel):
             raise ValueError(f"Invalid region. Supported: {', '.join(REGION_MAP.keys())}")
         return region
 
+    model_config = MODEL_CONFIG
+
 # --- Metadata & Error Models ---
 
 class ResponseMetadata(BaseModel):
@@ -33,46 +38,58 @@ class ResponseMetadata(BaseModel):
     api_version: str
     cache_hit: bool
 
+    model_config = MODEL_CONFIG
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
     retryable: bool
-    extra: Optional[dict] = None
+    extra: dict[str, Any] | None = None
+
+    model_config = MODEL_CONFIG
 
 # --- Player Data Sub-Models ---
 
 class AccountInfo(BaseModel):
     uid: str
-    nickname: Optional[str] = None
-    level: Optional[int] = None
-    exp: Optional[int] = None
-    region: Optional[str] = None
-    season_id: Optional[int] = None
-    preferred_mode: Optional[str] = None
-    language: Optional[str] = None
-    signature: Optional[str] = None
-    honor_score: Optional[int] = None
-    total_likes: Optional[int] = None
-    ob_version: Optional[str] = None
-    created_at_epoch: Optional[int] = None
-    created_at: Optional[str] = None
-    last_login_epoch: Optional[int] = None
-    last_login: Optional[str] = None
+    nickname: str | None = None
+    level: int | None = None
+    exp: int | None = None
+    region: str | None = None
+    season_id: int | None = None
+    preferred_mode: str | None = None
+    language: str | None = None
+    signature: str | None = None
+    honor_score: int | None = None
+    total_likes: int | None = None
+    ob_version: str | None = None
+    created_at_epoch: int | None = None
+    created_at: str | None = None
+    last_login_epoch: int | None = None
+    last_login: str | None = None
     account_type: str = "Normal"
+
+    model_config = MODEL_CONFIG
 
 class RankInfo(BaseModel):
     rank_name: str
-    rank_code: Optional[int] = None
-    points: Optional[int] = None
+    rank_code: int | None = None
+    points: int | None = None
     visible: bool = True
 
+    model_config = MODEL_CONFIG
+
 class BRRankInfo(RankInfo):
-    max_rank_name: Optional[str] = None
-    max_rank_code: Optional[int] = None
+    max_rank_name: str | None = None
+    max_rank_code: int | None = None
+
+    model_config = MODEL_CONFIG
 
 class ModeRankInfo(BaseModel):
     battle_royale: BRRankInfo
     clash_squad: RankInfo
+
+    model_config = MODEL_CONFIG
 
 class StatLine(BaseModel):
     matches: int = 0
@@ -80,75 +97,104 @@ class StatLine(BaseModel):
     win_rate: str = "0.00%"
     kills: int = 0
     deaths: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
     headshots: int = 0
     headshot_rate: str = "0.00%"
-    avg_damage_per_match: float = 0.0
+    avg_damage_per_match: Annotated[float, Field(ge=0.0)] = 0.0
     booyahs: int = 0
+
+    model_config = MODEL_CONFIG
 
 class BRStats(BaseModel):
     solo: StatLine
     duo: StatLine
     squad: StatLine
 
+    model_config = MODEL_CONFIG
+
 class CSRankedStats(BaseModel):
     matches: int = 0
     wins: int = 0
     win_rate: str = "0.00%"
     kills: int = 0
-    kd_ratio: float = 0.0
+    kd_ratio: Annotated[float, Field(ge=0.0)] = 0.0
+
+    model_config = MODEL_CONFIG
+
+class CSRankedWrapper(BaseModel):
+    ranked: CSRankedStats
+
+    model_config = MODEL_CONFIG
 
 class StatsInfo(BaseModel):
     battle_royale: BRStats
-    clash_squad: dict[str, CSRankedStats]
+    clash_squad: CSRankedWrapper
+
+    model_config = MODEL_CONFIG
 
 class GuildLeader(BaseModel):
     uid: str
-    nickname: Optional[str] = None
-    level: Optional[int] = None
-    rank_name: Optional[str] = None
+    nickname: str | None = None
+    level: int | None = None
+    rank_name: str | None = None
+
+    model_config = MODEL_CONFIG
 
 class GuildInfo(BaseModel):
     id: str
-    name: Optional[str] = None
-    level: Optional[int] = None
-    member_count: Optional[int] = None
-    capacity: Optional[int] = None
-    leader: Optional[GuildLeader] = None
+    name: str | None = None
+    level: int | None = None
+    member_count: int | None = None
+    capacity: int | None = None
+    leader: GuildLeader | None = None
+
+    model_config = MODEL_CONFIG
 
 class SocialInfo(BaseModel):
-    guild: Optional[GuildInfo] = None
+    guild: GuildInfo | None = None
+
+    model_config = MODEL_CONFIG
 
 class PetInfo(BaseModel):
-    name: Optional[str] = None
-    level: Optional[int] = None
-    exp: Optional[int] = None
-    active_skill: Optional[str] = None
-    skin_id: Optional[int] = None
+    name: str | None = None
+    level: int | None = None
+    exp: int | None = None
+    active_skill: str | None = None
+    skin_id: int | None = None
     is_selected: bool = False
 
+    model_config = MODEL_CONFIG
+
 class CosmeticsInfo(BaseModel):
-    avatar_id: Optional[int] = None
-    banner_id: Optional[int] = None
-    pin_id: Optional[int] = None
-    character_id: Optional[int] = None
-    equipped_outfit_ids: List[int] = []
-    equipped_weapon_skin_ids: List[int] = []
+    avatar_id: int | None = None
+    banner_id: int | None = None
+    pin_id: int | None = None
+    character_id: int | None = None
+    equipped_outfit_ids: list[int] = Field(default_factory=list)
+    equipped_weapon_skin_ids: list[int] = Field(default_factory=list)
+
+    model_config = MODEL_CONFIG
 
 class PassInfo(BaseModel):
-    booyah_pass_level: Optional[int] = None
+    booyah_pass_level: int | None = None
     fire_pass_status: str = "Basic"
-    fire_pass_badge_count: Optional[int] = None
+    fire_pass_badge_count: int | None = None
+
+    model_config = MODEL_CONFIG
 
 class CreditInfo(BaseModel):
-    score: Optional[int] = None
+    score: int | None = None
     reward_claimed: bool = False
-    summary_period: Optional[str] = None
+    summary_period: str | None = None
+
+    model_config = MODEL_CONFIG
 
 class BanInfo(BaseModel):
     is_banned: bool = False
-    ban_period: Optional[str] = None
-    ban_type: Optional[str] = None
+    ban_period: str | None = None
+    ban_type: str | None = None
+
+    model_config = MODEL_CONFIG
 
 # --- Main Output Models ---
 
@@ -157,17 +203,17 @@ class PlayerData(BaseModel):
     rank: ModeRankInfo
     stats: StatsInfo
     social: SocialInfo
-    pet: Optional[PetInfo] = None
+    pet: PetInfo | None = None
     cosmetics: CosmeticsInfo
     pass_info: PassInfo = Field(..., alias="pass")
     credit: CreditInfo
     ban: BanInfo
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = MODEL_CONFIG
 
 class PlayerResponse(BaseModel):
     metadata: ResponseMetadata
-    data: Optional[PlayerData] = None
-    error: Optional[ErrorDetail] = None
+    data: PlayerData | None = None
+    error: ErrorDetail | None = None
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = MODEL_CONFIG

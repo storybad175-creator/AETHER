@@ -7,10 +7,15 @@ class Settings(BaseSettings):
     Loaded from environment variables or .env file.
     """
     # Garena guest credentials
+    # Obtain by following the guest JWT extraction guide in README.md
     GARENA_GUEST_UID: str = Field(default="your_guest_uid_here")
     GARENA_GUEST_TOKEN: str = Field(default="your_guest_token_here")
 
     # AES crypto constants (Hex strings)
+    # Community-extracted from Free Fire APK binary analysis (e.g. libil2cpp.so)
+    # Update these values in your .env file.
+    # AES_KEY must be a 64-character hex string (32 bytes).
+    # AES_IV must be a 32-character hex string (16 bytes).
     AES_KEY: str = Field(default="your_32_byte_hex_key_here")
     AES_IV: str = Field(default="your_16_byte_hex_iv_here")
 
