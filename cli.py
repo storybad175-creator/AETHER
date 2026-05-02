@@ -11,17 +11,24 @@ from core.transport import transport
 logging.basicConfig(level=logging.ERROR)
 
 async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
+    """Processes a file containing UIDs concurrently (limit 10) and prints results as JSONL."""
     try:
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        # Process in chunks of 10 to match API concurrency limit
+        for i in range(0, len(uids), 10):
+            chunk = uids[i:i+10]
+            tasks = []
+            for uid in chunk:
+                tasks.append(fetch_player(uid, region))
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for uid, res in zip(chunk, results):
+                if isinstance(res, Exception):
+                    print(json.dumps({"uid": uid, "error": str(res)}), file=sys.stderr)
+                else:
+                    print(res.model_dump_json())
     finally:
         await transport.close()
 

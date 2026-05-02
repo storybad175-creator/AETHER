@@ -25,7 +25,9 @@ def test_proto_response_decode_nested():
 
     decoded = decode_response(outer_payload)
     assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
+    # My enhancement added recursive decoding for Field 1
+    assert isinstance(decoded[1], dict)
+    assert decoded[1][102] == nickname_val
 
     inner_decoded = decode_response(decoded[1])
     assert inner_decoded[102] == nickname_val
