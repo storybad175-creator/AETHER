@@ -14,16 +14,37 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     try:
         # Step 1: AES Decrypt
-        decrypted_bytes = aes_decrypt(raw_encrypted)
+        try:
+            decrypted_bytes = aes_decrypt(raw_encrypted)
+        except Exception as e:
+            # Failure Mode FM-04: AES Key Rotation
+            logger.error("AES Decryption failed. Possible key rotation.")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Decryption failed. Please update AES_KEY and AES_IV in .env",
+                extra={"possible_key_rotation": True, "action": "Update AES_KEY and AES_IV in .env"}
+            )
 
-        # Step 2: Protobuf Decode (Top level)
+        # Step 2: Protobuf Decode (Recursive via Strategy B)
         # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
         raw_msg = decode_response(decrypted_bytes)
 
+        if not raw_msg:
+             # If decryption was "successful" but results in empty/garbage
+             raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Decryption succeeded but data is invalid. Possible key rotation.",
+                extra={"possible_key_rotation": True, "action": "Update AES_KEY and AES_IV in .env"}
+            )
+
         def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
+            if not isinstance(data, dict):
+                return default
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
+            if isinstance(data, dict):
+                return data
             if isinstance(data, bytes):
                 return decode_response(data)
             return {}
@@ -36,10 +57,18 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
                     return None
             return str(data) if data is not None else None
 
+        def format_timestamp(epoch: Optional[int]) -> Optional[str]:
+            if epoch and epoch > 0:
+                return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(epoch))
+            return None
+
         # --- Sub-message Decoders ---
 
         # 1: Account
         acc_raw = decode_nested(safe_get(raw_msg, 1))
+        created_at_epoch = safe_get(acc_raw, 113)
+        last_login_epoch = safe_get(acc_raw, 114)
+
         account = {
             "uid": to_str(safe_get(acc_raw, 101)),
             "nickname": to_str(safe_get(acc_raw, 102)),
@@ -53,8 +82,10 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             "honor_score": safe_get(acc_raw, 110),
             "total_likes": safe_get(acc_raw, 111),
             "ob_version": to_str(safe_get(acc_raw, 112)),
-            "created_at_epoch": safe_get(acc_raw, 113),
-            "last_login_epoch": safe_get(acc_raw, 114),
+            "created_at_epoch": created_at_epoch,
+            "created_at": format_timestamp(created_at_epoch),
+            "last_login_epoch": last_login_epoch,
+            "last_login": format_timestamp(last_login_epoch),
             "account_type": "Normal" if safe_get(acc_raw, 115) == 0 else "Special"
         }
 
@@ -80,13 +111,14 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # 3: Stats
         stats_raw = decode_nested(safe_get(raw_msg, 3))
 
-        def parse_stat_line(data_bytes: bytes) -> Dict[str, Any]:
-            d = decode_response(data_bytes)
+        def parse_stat_line(data: Any) -> Dict[str, Any]:
+            d = decode_nested(data)
             m = safe_get(d, 401, 0)
             w = safe_get(d, 402, 0)
             k = safe_get(d, 403, 0)
             de = safe_get(d, 404, 0)
             hs = safe_get(d, 405, 0)
+            avg_dmg = safe_get(d, 406, 0.0)
 
             return {
                 "matches": m,
@@ -97,23 +129,28 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
                 "kd_ratio": round(k / max(de, 1), 2),
                 "headshots": hs,
                 "headshot_rate": f"{(hs / max(k, 1) * 100):.2f}%",
-                "avg_damage_per_match": round(safe_get(d, 406, 0.0), 2),
+                "avg_damage_per_match": round(avg_dmg, 2),
                 "booyahs": w
             }
 
+        cs_ranked_raw = decode_nested(safe_get(stats_raw, 304, {}))
+        cs_m = safe_get(cs_ranked_raw, 401, 0)
+        cs_w = safe_get(cs_ranked_raw, 402, 0)
+        cs_k = safe_get(cs_ranked_raw, 403, 0)
+
         stats = {
             "battle_royale": {
-                "solo": parse_stat_line(safe_get(stats_raw, 301, b"")),
-                "duo": parse_stat_line(safe_get(stats_raw, 302, b"")),
-                "squad": parse_stat_line(safe_get(stats_raw, 303, b""))
+                "solo": parse_stat_line(safe_get(stats_raw, 301, {})),
+                "duo": parse_stat_line(safe_get(stats_raw, 302, {})),
+                "squad": parse_stat_line(safe_get(stats_raw, 303, {}))
             },
             "clash_squad": {
                 "ranked": {
-                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 401, 0),
-                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 402, 0),
-                    "win_rate": "0.00%", # Computed by Pydantic or manually if needed
-                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 403, 0),
-                    "kd_ratio": 0.0
+                    "matches": cs_m,
+                    "wins": cs_w,
+                    "win_rate": f"{(cs_w / max(cs_m, 1) * 100):.2f}%",
+                    "kills": cs_k,
+                    "kd_ratio": round(cs_k / max(cs_m - cs_w, 1), 2)
                 }
             }
         }
