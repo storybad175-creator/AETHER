@@ -6,22 +6,33 @@ import logging
 from core.fetcher import fetch_player
 from config.regions import REGION_MAP
 from core.transport import transport
+from api.schemas import PlayerResponse
 
 # Disable logging for CLI unless requested
 logging.basicConfig(level=logging.ERROR)
 
+async def safe_fetch_cli(uid: str, region: str):
+    """Wraps fetch_player for CLI batch usage."""
+    try:
+        result = await fetch_player(uid, region)
+        return result.model_dump_json()
+    except Exception as e:
+        return json.dumps({"uid": uid, "error": str(e)})
+
 async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
+    """Processes a file containing UIDs and prints results as JSONL concurrently."""
     try:
         with open(file_path, 'r') as f:
             uids = [line.strip() for line in f if line.strip()]
 
-        for uid in uids:
-            try:
-                result = await fetch_player(uid, region)
-                print(result.model_dump_json())
-            except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+        # Process in chunks of 10 to avoid hammering
+        chunk_size = 10
+        for i in range(0, len(uids), chunk_size):
+            chunk = uids[i:i + chunk_size]
+            tasks = [safe_fetch_cli(uid, region) for uid in chunk]
+            results = await asyncio.gather(*tasks)
+            for res in results:
+                print(res)
     finally:
         await transport.close()
 
@@ -41,8 +52,7 @@ async def main():
         return
 
     if args.health:
-        # Mock health check for CLI
-        print(json.dumps({"status": "ok", "interface": "CLI"}, indent=2))
+        print(json.dumps({"status": "ok", "interface": "CLI", "timestamp": asyncio.get_event_loop().time()}, indent=2))
         return
 
     if args.batch:
