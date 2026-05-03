@@ -55,6 +55,8 @@ class JWTManager:
 
                 data = await resp.json()
                 self._token = data.get("jwt")
+                if not self._token:
+                    raise FFError(ErrorCode.AUTH_FAILED, "Garena MajorLogin response missing JWT.")
 
                 # Default expiry 24 hours if not provided
                 expires_in = data.get("expires_in", 86400)

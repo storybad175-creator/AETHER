@@ -17,18 +17,17 @@ def test_proto_request_encode():
 
 def test_proto_response_decode_nested():
     # Construct a nested payload
-    # Field 1 (AccountInfo): Tag (1 << 3 | 2) = 10
+    # Field 1 (AccountInfo): Tag (1 << 3 | 2) = 8
     # Inside AccountInfo: Field 102 (nickname): Tag (102 << 3 | 2) = 818
     nickname_val = b"Test"
     inner_payload = b"\xb2\x06" + encode_varint(len(nickname_val)) + nickname_val
     outer_payload = b"\x0a" + encode_varint(len(inner_payload)) + inner_payload
 
     decoded = decode_response(outer_payload)
-    assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
-
-    inner_decoded = decode_response(decoded[1])
-    assert inner_decoded[102] == nickname_val
+    # With upgraded proto.py, keys are names if mapped
+    assert "account" in decoded
+    assert "nickname" in decoded["account"]
+    assert decoded["account"]["nickname"] == nickname_val
 
 def test_rank_translation():
     from config.ranks import get_rank_name
