@@ -64,15 +64,25 @@ class AsyncTransport:
                         raise FFError(ErrorCode.AUTH_FAILED, "Authentication failed after refresh.")
 
                     if resp.status == 404:
-                        raise FFError(ErrorCode.PLAYER_NOT_FOUND, "Player UID not found in this region.")
+                        # FM-02: Wrong region suggestion
+                        raise FFError(
+                            ErrorCode.PLAYER_NOT_FOUND,
+                            "Player UID not found in this region. Player may exist in another region. Try: SG, IND, BR, ID"
+                        )
 
                     if resp.status == 429:
+                        # FM-05: Rate limit handling
                         retry_after = int(resp.headers.get("Retry-After", 10))
                         logger.warning(f"Rate limited (429). Retrying after {retry_after}s...")
                         if attempt < retry_count:
                             await asyncio.sleep(retry_after)
                             continue
-                        raise FFError(ErrorCode.RATE_LIMITED, "Exceeded Garena API rate limits.", extra={"retry_after": retry_after})
+                        raise FFError(
+                            ErrorCode.RATE_LIMITED,
+                            "Exceeded Garena API rate limits.",
+                            retryable=True,
+                            extra={"retry_after_seconds": retry_after}
+                        )
 
                     if resp.status >= 500:
                         logger.error(f"Garena server error ({resp.status}). Attempt {attempt}/{retry_count}")

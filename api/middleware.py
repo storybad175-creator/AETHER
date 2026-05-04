@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
@@ -24,44 +24,64 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._lock = asyncio.Lock()
+        self._cleanup_task: Optional[asyncio.Task] = None
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
-        while True:
-            await asyncio.sleep(300) # Every 5 minutes
-            now = time.time()
-            to_delete = []
-            for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
-                if not ts_list or now - ts_list[-1] > 300:
-                    to_delete.append(ip)
+        try:
+            while True:
+                await asyncio.sleep(300) # Every 5 minutes
+                now = time.time()
+                to_delete = []
+                async with self._lock:
+                    for ip, ts_list in self.visits.items():
+                        # If no requests in the last 5 minutes, consider inactive
+                        if not ts_list or now - ts_list[-1] > 300:
+                            to_delete.append(ip)
 
-            for ip in to_delete:
-                del self.visits[ip]
+                    for ip in to_delete:
+                        del self.visits[ip]
+        except asyncio.CancelledError:
+            pass
 
     async def dispatch(self, request: Request, call_next):
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
-        # Filter timestamps within the last 60 seconds
-        self.visits[client_ip] = [t for t in self.visits.get(client_ip, []) if now - t < 60]
+        async with self._lock:
+            # Filter timestamps within the last 60 seconds
+            self.visits[client_ip] = [t for t in self.visits.get(client_ip, []) if now - t < 60]
 
-        if len(self.visits[client_ip]) >= settings.RATE_LIMIT_RPM:
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "error": {
-                        "code": "RATE_LIMITED",
-                        "message": "Too many requests. Please try again later.",
-                        "retryable": True
-                    }
-                },
-                headers={"Retry-After": "60"}
-            )
+            if len(self.visits[client_ip]) >= settings.RATE_LIMIT_RPM:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "metadata": {
+                            "request_uid": request.query_params.get("uid", "N/A"),
+                            "request_region": request.query_params.get("region", "N/A"),
+                            "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                            "response_time_ms": 0,
+                            "api_version": settings.OB_VERSION,
+                            "cache_hit": False
+                        },
+                        "data": None,
+                        "error": {
+                            "code": ErrorCode.RATE_LIMITED,
+                            "message": "Too many requests. Please try again later.",
+                            "retryable": True
+                        }
+                    },
+                    headers={"Retry-After": "60"}
+                )
 
-        self.visits[client_ip].append(now)
+            self.visits[client_ip].append(now)
+
         return await call_next(request)
 
 async def error_handler_middleware(request: Request, call_next):
@@ -90,12 +110,25 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Granular error mapping for Pydantic validation errors
+        error_msg = exc.errors()[0]["msg"]
+        code = ErrorCode.INVALID_UID if "UID" in str(exc) else ErrorCode.INVALID_REGION
+
         return JSONResponse(
             status_code=400,
             content={
+                "metadata": {
+                    "request_uid": request.query_params.get("uid", "N/A"),
+                    "request_region": request.query_params.get("region", "N/A"),
+                    "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    "response_time_ms": 0,
+                    "api_version": settings.OB_VERSION,
+                    "cache_hit": False
+                },
+                "data": None,
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": error_msg,
                     "retryable": False
                 }
             }
@@ -105,8 +138,17 @@ async def error_handler_middleware(request: Request, call_next):
         return JSONResponse(
             status_code=500,
             content={
+                "metadata": {
+                    "request_uid": request.query_params.get("uid", "N/A"),
+                    "request_region": request.query_params.get("region", "N/A"),
+                    "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    "response_time_ms": 0,
+                    "api_version": settings.OB_VERSION,
+                    "cache_hit": False
+                },
+                "data": None,
                 "error": {
-                    "code": "INTERNAL_ERROR",
+                    "code": ErrorCode.SERVICE_UNAVAILABLE,
                     "message": "An unexpected internal error occurred.",
                     "retryable": False
                 }
