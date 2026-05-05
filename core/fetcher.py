@@ -20,14 +20,10 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
     """
     start_time = time.monotonic()
 
-    # 1. Validation (Indirectly via PlayerRequest Pydantic model)
-    try:
-        req = PlayerRequest(uid=uid, region=region)
-        uid = req.uid
-        region = req.region
-    except Exception as e:
-        # This will be caught by the outer try-except if not handled
-        raise
+    # 1. Validation
+    req = PlayerRequest(uid=uid, region=region)
+    uid = req.uid
+    region = req.region
 
     # 2. Cache Check
     cached_data = cache.get(uid, region)
@@ -66,7 +62,11 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
 
         try:
             # 4. Build Request
-            url = f"{get_region_url(region)}/api/v1/account"
+            base_url = get_region_url(region)
+            if not base_url:
+                raise FFError(ErrorCode.INVALID_REGION, f"Region {region} is not supported.")
+
+            url = f"{base_url}/api/v1/account"
 
             # 5. Encode & Encrypt
             proto_bytes = encode_request(uid, region, settings.OB_VERSION)

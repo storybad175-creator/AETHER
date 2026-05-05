@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     """
     Application settings for Free Fire API.
     Loaded from environment variables or .env file.
+
+    CREDENTIALS ACQUISITION:
+    - GARENA_GUEST_UID/TOKEN: Capture from 'MajorLogin' requests using Frida or MITM proxies.
+    - AES_KEY/IV: Extract from 'libil2cpp.so' or 'libunity.so' via binary analysis (e.g., using Ghidra).
     """
     # Garena guest credentials
     GARENA_GUEST_UID: str = Field(default="your_guest_uid_here")
