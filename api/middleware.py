@@ -24,8 +24,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task = None
+        self._lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -42,6 +42,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        # Lazy initialization of cleanup task
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
@@ -90,13 +96,32 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Map ValidationError to granular codes
+        error = exc.errors()[0]
+        msg = error["msg"]
+        code = "INVALID_INPUT"
+        if "UID" in msg.upper():
+            code = "INVALID_UID"
+        elif "REGION" in msg.upper():
+            code = "INVALID_REGION"
+
         return JSONResponse(
             status_code=400,
             content={
+                "metadata": {
+                    "request_uid": request.query_params.get("uid", "N/A"),
+                    "request_region": request.query_params.get("region", "N/A"),
+                    "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    "response_time_ms": 0,
+                    "api_version": settings.OB_VERSION,
+                    "cache_hit": False
+                },
+                "data": None,
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
-                    "retryable": False
+                    "code": code,
+                    "message": msg,
+                    "retryable": False,
+                    "extra": None
                 }
             }
         )

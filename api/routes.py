@@ -1,13 +1,50 @@
 import asyncio
 import time
 from fastapi import APIRouter, Query
-from typing import List, Optional
+from typing import List
+from pydantic import ValidationError
 from core.fetcher import fetch_player
-from api.schemas import PlayerResponse
+from api.schemas import PlayerResponse, PlayerRequest, ResponseMetadata, ErrorDetail
 from config.regions import REGION_MAP
 from config.settings import settings
+from api.errors import FFError
 
 router = APIRouter()
+
+def create_error_response(uid: str, region: str, error_code: str, message: str, retryable: bool = False, extra: dict | None = None) -> PlayerResponse:
+    """Helper to create a standardized error response."""
+    return PlayerResponse(
+        metadata=ResponseMetadata(
+            request_uid=uid,
+            request_region=region,
+            fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            response_time_ms=0,
+            api_version=settings.OB_VERSION,
+            cache_hit=False
+        ),
+        data=None,
+        error=ErrorDetail(
+            code=error_code,
+            message=message,
+            retryable=retryable,
+            extra=extra
+        )
+    )
+
+async def safe_fetch(uid: str, region: str) -> PlayerResponse:
+    """Safely fetch player data and return a PlayerResponse even on failure."""
+    try:
+        # Explicit validation first
+        try:
+            PlayerRequest(uid=uid, region=region)
+        except ValidationError as e:
+            return create_error_response(uid, region, "INVALID_INPUT", e.errors()[0]["msg"])
+
+        return await fetch_player(uid, region)
+    except FFError as e:
+        return create_error_response(uid, region, e.code, e.message, e.retryable, e.extra)
+    except Exception as e:
+        return create_error_response(uid, region, "INTERNAL_ERROR", str(e))
 
 @router.get("/player", response_model=PlayerResponse)
 async def get_player(
@@ -24,7 +61,7 @@ async def get_players_batch(
 ):
     """Fetches multiple players concurrently (max 10)."""
     uid_list = [uid.strip() for uid in uids.split(",") if uid.strip()][:10]
-    tasks = [fetch_player(uid, region) for uid in uid_list]
+    tasks = [safe_fetch(uid, region) for uid in uid_list]
     return await asyncio.gather(*tasks)
 
 @router.get("/health")
