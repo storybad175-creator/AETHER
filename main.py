@@ -30,9 +30,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add Middleware
-app.add_middleware(RequestIDMiddleware)
+# Add Middleware (Last added is the first to run)
+# We want error_handler_middleware to be the outermost layer.
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestIDMiddleware)
 app.middleware("http")(error_handler_middleware)
 
 # Include Routes
