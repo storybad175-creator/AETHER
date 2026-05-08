@@ -1,8 +1,7 @@
 import asyncio
-import aiohttp
 import logging
-import time
-from typing import Optional, Dict, Any
+import aiohttp
+from typing import Optional, Any, Dict
 from config.settings import settings
 from core.auth import jwt_manager
 from api.errors import FFError, ErrorCode
@@ -11,92 +10,99 @@ logger = logging.getLogger(__name__)
 
 class AsyncTransport:
     """
-    Handles asynchronous HTTP requests with exponential backoff,
-    retries, and JWT authentication.
+    Handles all HTTP communication with Garena endpoints.
+    Implements retries with exponential backoff and respects rate limit headers.
     """
     def __init__(self):
         self._session: Optional[aiohttp.ClientSession] = None
 
     @property
     def session(self) -> aiohttp.ClientSession:
+        """Returns the shared ClientSession, creating it if needed."""
         if self._session is None or self._session.closed:
-            # We initialize it here if needed, but main.py should handle life-cycle
             self._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=15),
                 headers={
-                    "User-Agent": "FreeFire/1.103.1 (Android 13; Pixel 7)",
+                    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; SM-S901B Build/TP1A.220624.014)",
                     "X-Unity-Version": "2022.3.12f1",
-                    "Accept": "application/x-protobuf"
+                    "Release-Version": settings.OB_VERSION,
+                    "Connection": "keep-alive"
                 }
             )
         return self._session
 
     async def close(self):
+        """Gracefully closes the shared session."""
         if self._session and not self._session.closed:
             await self._session.close()
 
-    async def post(self, url: str, data: bytes, retry_count: int = 4) -> bytes:
+    async def post(self, url: str, data: bytes, retry_count: int = 0) -> bytes:
         """
-        Performs a POST request with retry logic.
+        Performs an authenticated POST request with exponential backoff retries.
         """
-        for attempt in range(1, retry_count + 1):
-            try:
-                headers = {
-                    "Content-Type": "application/x-protobuf",
-                    "X-Garena-OB": settings.OB_VERSION
-                }
+        max_retries = 3
+        backoff_schedule = [1, 3, 7] # Seconds to wait between retries
 
-                try:
-                    token = await jwt_manager.get_token()
-                    if token:
-                        headers["Authorization"] = f"Bearer {token}"
-                except Exception as e:
-                    logger.warning(f"Could not retrieve JWT token: {e}. Attempting without auth.")
+        token = await jwt_manager.get_token()
+        headers = {"Authorization": f"Bearer {token}"}
 
-                async with self.session.post(url, data=data, headers=headers, timeout=12) as resp:
-                    if resp.status == 200:
-                        return await resp.read()
+        try:
+            async with self.session.post(url, data=data, headers=headers) as resp:
+                # Handle Success
+                if resp.status == 200:
+                    return await resp.read()
 
-                    if resp.status == 401:
-                        logger.warning("Received 401 Unauthorized. Refreshing JWT and retrying...")
-                        jwt_manager.force_refresh()
-                        if attempt < retry_count:
-                            continue
-                        raise FFError(ErrorCode.AUTH_FAILED, "Authentication failed after refresh.")
+                # Handle 401 (Auth Expired)
+                if resp.status == 401 and retry_count < 1:
+                    logger.warning("Received 401, refreshing token and retrying...")
+                    await jwt_manager.get_token(force_refresh=True)
+                    return await self.post(url, data, retry_count + 1)
 
-                    if resp.status == 404:
-                        raise FFError(ErrorCode.PLAYER_NOT_FOUND, "Player UID not found in this region.")
+                # Handle 404 (Player Not Found)
+                if resp.status == 404:
+                    raise FFError(
+                        ErrorCode.PLAYER_NOT_FOUND,
+                        "Player not found. The player may exist in another region. Try: SG, IND, BR, ID."
+                    )
 
-                    if resp.status == 429:
-                        retry_after = int(resp.headers.get("Retry-After", 10))
-                        logger.warning(f"Rate limited (429). Retrying after {retry_after}s...")
-                        if attempt < retry_count:
-                            await asyncio.sleep(retry_after)
-                            continue
-                        raise FFError(ErrorCode.RATE_LIMITED, "Exceeded Garena API rate limits.", extra={"retry_after": retry_after})
+                # Handle 429 (Rate Limited)
+                if resp.status == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 10))
+                    if retry_count < max_retries:
+                        logger.warning(f"Rate limited (429). Waiting {retry_after}s before retry {retry_count + 1}")
+                        await asyncio.sleep(retry_after)
+                        return await self.post(url, data, retry_count + 1)
+                    else:
+                        raise FFError(
+                            ErrorCode.RATE_LIMITED,
+                            f"Rate limit exceeded. Try again in {retry_after}s.",
+                            extra={"retry_after": retry_after}
+                        )
 
-                    if resp.status >= 500:
-                        logger.error(f"Garena server error ({resp.status}). Attempt {attempt}/{retry_count}")
-                        if attempt < retry_count:
-                            await self._backoff(attempt)
-                            continue
-                        raise FFError(ErrorCode.SERVICE_UNAVAILABLE, "Garena services are currently unavailable.")
+                # Handle 5xx or other transient errors
+                if resp.status >= 500 and retry_count < max_retries:
+                    wait_time = backoff_schedule[retry_count]
+                    logger.warning(f"Server error {resp.status}. Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    return await self.post(url, data, retry_count + 1)
 
-                    # Handle other non-200 codes
-                    body = await resp.text()
-                    logger.error(f"Unexpected response {resp.status}: {body}")
-                    raise FFError(ErrorCode.SERVICE_UNAVAILABLE, f"Unexpected Garena response: {resp.status}")
+                # Final catch for all other non-200 responses
+                raise FFError(
+                    ErrorCode.SERVICE_UNAVAILABLE,
+                    f"Garena API returned status {resp.status}."
+                )
 
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                logger.warning(f"Network error on attempt {attempt}: {e}")
-                if attempt < retry_count:
-                    await self._backoff(attempt)
-                    continue
-                raise FFError(ErrorCode.TIMEOUT, "Connection to Garena timed out.")
+        except asyncio.TimeoutError:
+            if retry_count < max_retries:
+                wait_time = backoff_schedule[retry_count]
+                logger.warning(f"Timeout occurred. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+                return await self.post(url, data, retry_count + 1)
+            raise FFError(ErrorCode.TIMEOUT, "Request timed out after multiple attempts.")
 
-    async def _backoff(self, attempt: int):
-        """Exponential backoff: 1, 3, 7 seconds."""
-        wait = (2 ** attempt) - 1
-        await asyncio.sleep(wait)
+        except aiohttp.ClientError as e:
+            logger.error(f"HTTP client error: {e}")
+            raise FFError(ErrorCode.SERVICE_UNAVAILABLE, f"Network error: {str(e)}")
 
 # Singleton instance
 transport = AsyncTransport()

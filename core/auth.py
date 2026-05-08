@@ -1,6 +1,6 @@
 import time
-import asyncio
 import logging
+import asyncio
 from typing import Optional
 from config.settings import settings
 from api.errors import FFError, ErrorCode
@@ -9,69 +9,72 @@ logger = logging.getLogger(__name__)
 
 class JWTManager:
     """
-    Manages the Garena MajorLogin JWT authentication lifecycle.
-    Includes auto-refresh and proactive expiry handling.
+    Manages the Garena MajorLogin JWT lifecycle.
+    Handles silent refreshes and proactive token updates.
     """
-    def __init__(self):
-        self._token: Optional[str] = None
-        self._expires_at: float = 0
-        self._lock = asyncio.Lock()
+    _instance = None
 
-    async def get_token(self) -> str:
-        """
-        Returns a valid JWT token.
-        Refreshes if the token is missing, expired, or near expiry.
-        """
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(JWTManager, cls).__new__(cls)
+            cls._instance._token = None
+            cls._instance._expires_at = 0.0
+            cls._instance._lock = asyncio.Lock()
+        return cls._instance
+
+    @property
+    def is_expired(self) -> bool:
+        """Checks if the current token is expired or close to expiry (within 60s)."""
+        return time.time() > (self._expires_at - 60)
+
+    async def get_token(self, force_refresh: bool = False) -> str:
+        """Returns a valid JWT token, refreshing if necessary."""
         async with self._lock:
-            # Proactive refresh: if token expires in less than 60 seconds
-            if not self._token or time.time() > (self._expires_at - 60):
+            if self._token is None or self.is_expired or force_refresh:
                 await self.refresh()
             return self._token
 
     async def refresh(self):
         """
-        Performs the MajorLogin request to obtain a new JWT.
+        Performs the Garena MajorLogin request to obtain a new JWT.
+        Uses the shared aiohttp session from the transport module.
         """
-        from core.transport import transport # Local import to avoid circular dependency
+        logger.info("Refreshing Garena JWT token...")
 
-        logger.info("Refreshing Garena MajorLogin JWT...")
+        # Local import to avoid circular dependency
+        from core.transport import transport
 
         url = "https://loginbp.ggblueshark.com/MajorLogin"
         payload = {
             "uid": settings.GARENA_GUEST_UID,
             "token": settings.GARENA_GUEST_TOKEN,
-            "region": "SG" # MajorLogin usually uses a stable region
+            "region": "IND" # Region doesn't matter for MajorLogin
         }
 
         try:
-            # We use a raw post here to avoid bearer token loop
+            # We don't use transport.post here to avoid recursion and auth headers
             async with transport.session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
                     logger.error(f"MajorLogin failed with status {resp.status}")
-                    raise FFError(
-                        ErrorCode.AUTH_FAILED,
-                        "Failed to authenticate with Garena MajorLogin endpoint."
-                    )
+                    raise FFError(ErrorCode.AUTH_FAILED, "Garena MajorLogin failed. Check guest credentials.")
 
                 data = await resp.json()
-                self._token = data.get("jwt")
+                self._token = data.get("token")
 
-                # Default expiry 24 hours if not provided
+                # Default to 24h if expiry not provided (unlikely)
                 expires_in = data.get("expires_in", 86400)
                 self._expires_at = time.time() + float(expires_in)
 
-                logger.info(f"JWT refreshed successfully. Expires at: {time.ctime(self._expires_at)}")
+                if not self._token:
+                    raise FFError(ErrorCode.AUTH_FAILED, "No token found in MajorLogin response.")
 
+                logger.info("JWT token refreshed successfully.")
+
+        except FFError:
+            raise
         except Exception as e:
-            if isinstance(e, FFError):
-                raise
             logger.exception("Unexpected error during JWT refresh")
             raise FFError(ErrorCode.AUTH_FAILED, f"JWT refresh failed: {str(e)}")
-
-    def force_refresh(self):
-        """Invalidates current token to trigger refresh on next get_token call."""
-        self._token = None
-        self._expires_at = 0
 
 # Singleton instance
 jwt_manager = JWTManager()

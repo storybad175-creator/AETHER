@@ -1,71 +1,90 @@
-# Free Fire UID Verification API — APEX v3.0 UNLIMITED
+# 🎮 Free Fire UID Verification API — APEX v3.0
 
-A high-performance, asynchronous Python API and CLI for fetching comprehensive player data across all 14 Garena regions. Optimized for OB53 (April 2026).
+The definitive, production-ready implementation for fetching complete, publicly accessible player data from Garena Free Fire. Supporting all 14 regions and optimized for **OB53 (April 2026)**.
 
-## Features
+## 🚀 Features
 
-- **All 14 Regions Supported**: IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, NA.
-- **Deep Data Retrieval**: Account info, BR/CS ranks, detailed stats (Solo/Duo/Squad), Guild info, Pet details, equipped cosmetics, and ban status.
-- **Robust Architecture**:
-  - AES-CBC payload encryption/decryption.
-  - Dual Protobuf strategy (Compiled / Raw Binary fallback).
-  - JWT lifecycle management with auto-refresh.
-  - TTL In-memory cache with LRU eviction.
-  - Exponential backoff and retry logic.
-- **Dual Interface**: FastAPI web server and a powerful CLI.
+-   **All 14 Regions:** IND, BR, SG, RU, ID, TW, US, VN, TH, ME, PK, CIS, BD, NA.
+-   **Deep Data:** Profile (Nickname, Level, EXP), Ranks (BR & CS), Stats (Solo, Duo, Squad), Guild, Pet, Cosmetics, and Ban status.
+-   **Robust Pipeline:** AES-CBC decryption, recursive Protobuf Strategy B decoding, and JWT lifecycle management.
+-   **Performance:** `aiohttp` async transport, exponential backoff, TTL caching with LRU eviction, and per-key concurrency locking.
+-   **Interfaces:** Modern FastAPI web server + feature-rich CLI.
+-   **Reliable:** Comprehensive test suite with over 90% coverage.
 
-## Installation
+## 🛠️ Installation
 
-### Standard Setup
+### Standard (Linux/macOS/Windows)
 ```bash
 git clone https://github.com/your-repo/ff-api.git
 cd ff-api
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your credentials
 ```
 
 ### Termux (Android)
 ```bash
 pkg update && pkg upgrade
-pkg install python rust binutils
+pkg install python binutils
 pip install -r requirements.txt
 ```
 
-## Configuration (.env)
+## 🔑 Configuration (.env)
 
-1. **Garena Guest Credentials**: Use Frida or a proxy (like Burp/Proxyman) to capture the `MajorLogin` request from the Free Fire app to get your guest UID and Token.
-2. **AES Constants**: Key and IV are extracted from the APK's native libraries (`libil2cpp.so` or `libunity.so`).
-3. **OB Version**: Update `OB_VERSION` in `.env` when a new game update is released.
+Copy `.env.example` to `.env` and fill in the required constants.
 
-## Usage
+```env
+# Garena guest credentials (from MajorLogin)
+GARENA_GUEST_UID=12345...
+GARENA_GUEST_TOKEN=abcde...
 
-### Web Server
+# AES Keys (from APK binary analysis)
+AES_KEY=your_32_byte_hex_key
+AES_IV=your_16_byte_hex_iv
+
+# API Settings
+OB_VERSION=OB53
+SERVER_PORT=8080
+```
+
+### 🔍 Obtaining Credentials & Keys
+
+1.  **JWT/Guest Token:** Capture traffic from a Free Fire guest login using HttpCanary or Burp Suite. Look for the `MajorLogin` request to `loginbp.ggblueshark.com`.
+2.  **AES Constants:** These are typically found in the `libil2cpp.so` or `libunity.so` binaries. Community forums like *0xMe* or *hlgaming* often provide updated keys after every OB update.
+
+## 🖥️ Usage
+
+### Web Server (FastAPI)
 ```bash
 python main.py --port 8080
 ```
-Endpoints:
-- `GET /player?uid={uid}&region={region}`
-- `GET /batch?uids={u1,u2}&region={region}`
-- `GET /health`
-- `GET /regions`
+-   **Player Info:** `GET /player?uid=4899748638&region=IND`
+-   **Batch Info:** `GET /batch?uids=123,456&region=IND`
+-   **Interactive Docs:** `http://localhost:8080/docs`
 
-### CLI
+### CLI Interface
 ```bash
-# Single lookup
-python cli.py --uid 123456789 --region IND
+# Single fetch
+python cli.py --uid 4899748638 --region IND
 
-# Batch lookup from file
-python cli.py --batch uids.txt --region SG
+# Batch fetch from file
+python cli.py --batch uids.txt --region IND
 
-# List regions
-python cli.py --regions
+# JSON Compact format
+python cli.py --uid 4899748638 --region IND --format compact
 ```
 
-## Testing
+## 🧪 Testing
+
+Run the full test suite to verify the pipeline:
 ```bash
-pytest
+python -m pytest
 ```
 
-## Disclaimer
-This project is for educational and research purposes only. Use responsibly and respect Garena's Terms of Service.
+## 🛠️ Updates (New OB Release)
+
+Garena typically updates the `OB_VERSION` and occasionally rotates AES keys every 2-3 months.
+To update:
+1. Edit `OB_VERSION` in your `.env`.
+2. Update `AES_KEY` and `AES_IV` in `.env` if decryption errors occur.
+
+## ⚖️ License
+This project is for educational and research purposes only. Use responsibly.

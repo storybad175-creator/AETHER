@@ -1,43 +1,67 @@
 """
-Mapping for rank integer codes to human-readable rank names.
-Supports both Battle Royale (BR) and Clash Squad (CS) modes.
+Rank ID mappings for Battle Royale and Clash Squad modes.
+Used to translate integer rank codes from Garena into human-readable strings.
 """
 
-# Common Rank Mapping
-RANK_MAP: dict[int, str] = {
+RANK_MAP = {
+    # --- Battle Royale (1xx) ---
     0: "Unranked",
-    # Bronze
-    101: "Bronze I", 102: "Bronze II", 103: "Bronze III",
-    # Silver
-    201: "Silver I", 202: "Silver II", 203: "Silver III",
-    # Gold
-    301: "Gold I", 302: "Gold II", 303: "Gold III", 304: "Gold IV",
-    # Platinum
-    401: "Platinum I", 402: "Platinum II", 403: "Platinum III", 404: "Platinum IV",
-    # Diamond
-    501: "Diamond I", 502: "Diamond II", 503: "Diamond III", 504: "Diamond IV",
-    # Heroic
+    101: "Bronze I",
+    102: "Bronze II",
+    103: "Bronze III",
+    104: "Silver I",
+    105: "Silver II",
+    106: "Silver III",
+    107: "Gold I",
+    108: "Gold II",
+    109: "Gold III",
+    110: "Gold IV",
+    111: "Platinum I",
+    112: "Platinum II",
+    113: "Platinum III",
+    114: "Platinum IV",
+    115: "Diamond I",
+    116: "Diamond II",
+    117: "Diamond III",
+    118: "Diamond IV",
+    119: "Heroic",
+    120: "Elite Heroic",
+    121: "Master",
+    122: "Elite Master",
+    123: "Grandmaster",
+
+    # --- Clash Squad (2xx) ---
+    201: "Bronze I",
+    202: "Bronze II",
+    203: "Bronze III",
+    204: "Silver I",
+    205: "Silver II",
+    206: "Silver III",
+    207: "Gold I",
+    208: "Gold II",
+    209: "Gold III",
+    210: "Gold IV",
+    211: "Platinum I",
+    212: "Platinum II",
+    213: "Platinum III",
+    214: "Platinum IV",
+    215: "Diamond I",
+    216: "Diamond II",
+    217: "Diamond III",
+    218: "Diamond IV",
+    219: "Heroic",
+    220: "Elite Heroic",
+    221: "Master",
+    222: "Elite Master",
+    223: "Grandmaster",
+
+    # --- Other Ranks / Legacy ---
     601: "Heroic",
-    # Grandmaster
-    701: "Grandmaster",
+    602: "Grandmaster",
 }
 
-def get_rank_name(rank_code: int) -> str:
-    """Translates integer rank code to string name."""
+def get_rank_name(rank_code: int | None) -> str:
+    """Returns the human-readable rank name for a given code."""
     if rank_code is None:
-        return "Unknown"
-
-    # Simple logic to handle ranges if exact match not found
-    if rank_code in RANK_MAP:
-        return RANK_MAP[rank_code]
-
-    # Fallback/Default naming
-    if 1 <= rank_code <= 3: return f"Bronze {rank_code}"
-    if 4 <= rank_code <= 6: return f"Silver {rank_code-3}"
-    if 7 <= rank_code <= 10: return f"Gold {rank_code-6}"
-    if 11 <= rank_code <= 14: return f"Platinum {rank_code-10}"
-    if 15 <= rank_code <= 18: return f"Diamond {rank_code-14}"
-    if rank_code == 19: return "Heroic"
-    if rank_code >= 20: return "Grandmaster"
-
-    return "Unknown"
+        return "Unranked"
+    return RANK_MAP.get(rank_code, f"Rank {rank_code}")

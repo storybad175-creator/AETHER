@@ -1,35 +1,61 @@
 import pytest
+import time
 from unittest.mock import AsyncMock, patch
 from core.auth import JWTManager
+from api.errors import FFError, ErrorCode
 
 @pytest.mark.asyncio
-async def test_token_fetch(mock_settings):
+async def test_jwt_manager_singleton():
+    manager1 = JWTManager()
+    manager2 = JWTManager()
+    assert manager1 is manager2
+
+@pytest.mark.asyncio
+async def test_jwt_refresh_success(mock_settings, mock_jwt):
     manager = JWTManager()
+    manager._token = None # Reset
 
     mock_resp = AsyncMock()
-    mock_resp.__aenter__.return_value.status = 200
-    mock_resp.__aenter__.return_value.json.return_value = {"jwt": "new.token", "expires_in": 3600}
+    mock_resp.status = 200
+    mock_resp.json.return_value = {"token": mock_jwt, "expires_in": 3600}
 
-    with patch("core.transport.transport.session.post", return_value=mock_resp):
+    with patch("core.transport.transport.session.post") as mock_post:
+        mock_post.return_value.__aenter__.return_value = mock_resp
+
         token = await manager.get_token()
-        assert token == "new.token"
-        assert manager._token == "new.token"
+        assert token == mock_jwt
+        assert manager._token == mock_jwt
+        assert manager._expires_at > time.time()
 
 @pytest.mark.asyncio
-async def test_token_caching(mock_settings):
+async def test_jwt_refresh_failure(mock_settings):
     manager = JWTManager()
-    manager._token = "cached.token"
-    manager._expires_at = 9999999999 # Far in the future
+    manager._token = None
 
-    token = await manager.get_token()
-    assert token == "cached.token"
+    mock_resp = AsyncMock()
+    mock_resp.status = 401
+
+    with patch("core.transport.transport.session.post") as mock_post:
+        mock_post.return_value.__aenter__.return_value = mock_resp
+
+        with pytest.raises(FFError) as exc:
+            await manager.refresh()
+        assert exc.value.code == ErrorCode.AUTH_FAILED
 
 @pytest.mark.asyncio
-async def test_force_refresh(mock_settings):
+async def test_proactive_refresh(mock_settings, mock_jwt):
     manager = JWTManager()
-    manager._token = "cached.token"
-    manager._expires_at = 9999999999
+    # Set expiry to 30 seconds in the future (within the 60s proactive window)
+    manager._token = "old_token"
+    manager._expires_at = time.time() + 30
 
-    manager.force_refresh()
-    assert manager._token is None
-    assert manager._expires_at == 0
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json.return_value = {"token": "new_token", "expires_in": 3600}
+
+    with patch("core.transport.transport.session.post") as mock_post:
+        mock_post.return_value.__aenter__.return_value = mock_resp
+
+        token = await manager.get_token()
+        assert token == "new_token"
+        mock_post.assert_called_once()

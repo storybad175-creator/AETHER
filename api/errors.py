@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, Any, Dict
+from typing import Optional, Any
 
 class ErrorCode(str, Enum):
     INVALID_UID = "INVALID_UID"
@@ -18,7 +18,7 @@ class FFError(Exception):
         code: ErrorCode,
         message: str,
         retryable: bool = False,
-        extra: Optional[Dict[str, Any]] = None
+        extra: Optional[dict[str, Any]] = None
     ):
         self.code = code
         self.message = message
@@ -26,14 +26,14 @@ class FFError(Exception):
         self.extra = extra
         super().__init__(self.message)
 
-# Mapping ErrorCodes to HTTP Status Codes
+# Mapping ErrorCodes to HTTP status codes
 ERROR_HTTP_MAP = {
     ErrorCode.INVALID_UID: 400,
     ErrorCode.INVALID_REGION: 400,
-    ErrorCode.AUTH_FAILED: 401,
     ErrorCode.PLAYER_NOT_FOUND: 404,
+    ErrorCode.AUTH_FAILED: 401,
     ErrorCode.RATE_LIMITED: 429,
-    ErrorCode.DECODE_ERROR: 503,
     ErrorCode.SERVICE_UNAVAILABLE: 503,
+    ErrorCode.DECODE_ERROR: 503,
     ErrorCode.TIMEOUT: 503,
 }
