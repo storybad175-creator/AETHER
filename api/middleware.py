@@ -24,8 +24,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task = None
+        self._lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -42,6 +42,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
@@ -90,12 +95,14 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        msg = exc.errors()[0]["msg"]
+        code = ErrorCode.INVALID_UID if "UID" in msg else ErrorCode.INVALID_REGION
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": msg,
                     "retryable": False
                 }
             }
