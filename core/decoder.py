@@ -14,17 +14,38 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     try:
         # Step 1: AES Decrypt
-        decrypted_bytes = aes_decrypt(raw_encrypted)
+        try:
+            decrypted_bytes = aes_decrypt(raw_encrypted)
+        except Exception as e:
+            logger.error(f"AES decryption failed: {e}")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Failed to decrypt Garena response. This may indicate AES key rotation.",
+                extra={"possible_key_rotation": True, "action": "Update AES_KEY and AES_IV in .env"}
+            )
 
-        # Step 2: Protobuf Decode (Top level)
+        # Step 2: Protobuf Decode (Recursive via Strategy B)
         # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
-        raw_msg = decode_response(decrypted_bytes)
+        try:
+            raw_msg = decode_response(decrypted_bytes)
+        except Exception as e:
+            logger.error(f"Protobuf decoding failed: {e}")
+            raise FFError(
+                ErrorCode.DECODE_ERROR,
+                "Failed to parse protobuf response. Check AES constants and OB_VERSION.",
+                extra={"possible_key_rotation": True}
+            )
 
         def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
+            if not isinstance(data, dict):
+                return default
             return data.get(field_id, default)
 
         def decode_nested(data: Any) -> Dict[int, Any]:
-            if isinstance(data, bytes):
+            """Helper to ensure nested data is a dict (already handled by recursive proto)."""
+            if isinstance(data, dict):
+                return data
+            if isinstance(data, bytes) and len(data) > 0:
                 return decode_response(data)
             return {}
 
@@ -40,6 +61,9 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
 
         # 1: Account
         acc_raw = decode_nested(safe_get(raw_msg, 1))
+        created_at_epoch = safe_get(acc_raw, 113)
+        last_login_epoch = safe_get(acc_raw, 114)
+
         account = {
             "uid": to_str(safe_get(acc_raw, 101)),
             "nickname": to_str(safe_get(acc_raw, 102)),
@@ -53,8 +77,10 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             "honor_score": safe_get(acc_raw, 110),
             "total_likes": safe_get(acc_raw, 111),
             "ob_version": to_str(safe_get(acc_raw, 112)),
-            "created_at_epoch": safe_get(acc_raw, 113),
-            "last_login_epoch": safe_get(acc_raw, 114),
+            "created_at_epoch": created_at_epoch,
+            "created_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(created_at_epoch)) if created_at_epoch else None,
+            "last_login_epoch": last_login_epoch,
+            "last_login": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(last_login_epoch)) if last_login_epoch else None,
             "account_type": "Normal" if safe_get(acc_raw, 115) == 0 else "Special"
         }
 
@@ -80,8 +106,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # 3: Stats
         stats_raw = decode_nested(safe_get(raw_msg, 3))
 
-        def parse_stat_line(data_bytes: bytes) -> Dict[str, Any]:
-            d = decode_response(data_bytes)
+        def parse_stat_line(data: Any) -> Dict[str, Any]:
+            d = decode_nested(data)
             m = safe_get(d, 401, 0)
             w = safe_get(d, 402, 0)
             k = safe_get(d, 403, 0)
@@ -208,6 +234,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             ban=ban
         )
 
+    except FFError:
+        raise
     except Exception as e:
         logger.exception("Decoding error")
         raise FFError(

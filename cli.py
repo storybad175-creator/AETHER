@@ -10,18 +10,27 @@ from core.transport import transport
 # Disable logging for CLI unless requested
 logging.basicConfig(level=logging.ERROR)
 
-async def run_batch(file_path: str, region: str):
-    """Processes a file containing UIDs and prints results as JSONL."""
-    try:
-        with open(file_path, 'r') as f:
-            uids = [line.strip() for line in f if line.strip()]
+async def run_batch(file_path: str, region: str, use_color: bool = True):
+    """Processes a file containing UIDs concurrently and prints results as JSONL."""
+    semaphore = asyncio.Semaphore(10)
 
-        for uid in uids:
+    async def fetch_with_sem(uid):
+        async with semaphore:
             try:
                 result = await fetch_player(uid, region)
                 print(result.model_dump_json())
             except Exception as e:
-                print(json.dumps({"uid": uid, "error": str(e)}), file=sys.stderr)
+                error_msg = f"Error fetching {uid}: {str(e)}"
+                if use_color:
+                    print(f"\033[91m{error_msg}\033[0m", file=sys.stderr)
+                else:
+                    print(error_msg, file=sys.stderr)
+
+    try:
+        with open(file_path, 'r') as f:
+            uids = [line.strip() for line in f if line.strip()]
+
+        await asyncio.gather(*(fetch_with_sem(uid) for uid in uids))
     finally:
         await transport.close()
 
@@ -33,8 +42,10 @@ async def main():
     parser.add_argument("--regions", action="store_true", help="List supported regions")
     parser.add_argument("--health", action="store_true", help="Check API health")
     parser.add_argument("--format", choices=["pretty", "compact"], default="pretty", help="Output format")
+    parser.add_argument("--no-color", action="store_true", help="Disable colorized output")
 
     args = parser.parse_args()
+    use_color = not args.no_color
 
     if args.regions:
         print(json.dumps(list(REGION_MAP.keys()), indent=2))
@@ -49,7 +60,7 @@ async def main():
         if not args.region:
             print("Error: --region is required for batch mode", file=sys.stderr)
             sys.exit(1)
-        await run_batch(args.batch, args.region)
+        await run_batch(args.batch, args.region, use_color=use_color)
         return
 
     if args.uid and args.region:
