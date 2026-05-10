@@ -53,7 +53,7 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Recursive decoding for nested messages based on known field IDs.
     """
     result = {}
     pos = 0
@@ -61,36 +61,42 @@ def decode_response_raw(data: bytes) -> Dict[int, Any]:
         try:
             tag, pos = decode_varint(data, pos)
         except IndexError:
-            break # Reached end of data
+            break
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
+        val: Any = None
         if wire_type == 0: # Varint
             val, pos = decode_varint(data, pos)
-            result[field_id] = val
         elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
+            val = struct.unpack("<Q", data[pos:pos+8])[0]
             pos += 8
-        elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
+        elif wire_type == 2: # Length-delimited
             length, pos = decode_varint(data, pos)
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
-            else:
-                result[field_id] = val
+            # Heuristic: If field_id is in 1-9 (top categories) or 301-304 (stats), it's nested
+            if field_id in range(1, 10) or field_id in range(301, 305):
+                try:
+                    val = decode_response_raw(val)
+                except Exception:
+                    pass # Keep as bytes if it fails to parse as sub-message
         elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
+            val = struct.unpack("<I", data[pos:pos+4])[0]
             pos += 4
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            # Skip unknown wire types
+            logger.warning(f"Unknown wire type {wire_type} at pos {pos}")
+            break
+
+        if field_id in result:
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
+        else:
+            result[field_id] = val
 
     return result
 
@@ -112,4 +118,7 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
 
 def decode_response(data: bytes) -> Dict[int, Any]:
     """Entry point for decoding player responses."""
+    # The entry point can take bytes OR a dict (if already decoded recursively)
+    if isinstance(data, dict):
+        return data
     return decode_response_raw(data)

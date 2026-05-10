@@ -2,17 +2,44 @@ import pytest
 import asyncio
 import time
 from unittest.mock import MagicMock, AsyncMock, patch
-from config.settings import settings
+from config.settings import settings as real_settings
 
 @pytest.fixture
 def mock_settings():
-    with patch("config.settings.settings") as mocked:
-        mocked.AES_KEY = "0" * 64
-        mocked.AES_IV = "0" * 32
-        mocked.GARENA_GUEST_UID = "test_uid"
-        mocked.GARENA_GUEST_TOKEN = "test_token"
-        mocked.OB_VERSION = "OB53"
-        yield mocked
+    # Instead of patching the instance, we can patch the values on the real instance
+    # to avoid issues with modules that already imported it.
+    old_key = real_settings.AES_KEY
+    old_iv = real_settings.AES_IV
+    old_uid = real_settings.GARENA_GUEST_UID
+    old_token = real_settings.GARENA_GUEST_TOKEN
+    old_ob = real_settings.OB_VERSION
+
+    real_settings.AES_KEY = "0" * 64
+    real_settings.AES_IV = "0" * 32
+    real_settings.GARENA_GUEST_UID = "test_uid"
+    real_settings.GARENA_GUEST_TOKEN = "test_token"
+    real_settings.OB_VERSION = "OB53"
+
+    # Also re-init the cipher if it exists
+    try:
+        from core.crypto import cipher
+        cipher.__init__()
+    except ImportError:
+        pass
+
+    yield real_settings
+
+    real_settings.AES_KEY = old_key
+    real_settings.AES_IV = old_iv
+    real_settings.GARENA_GUEST_UID = old_uid
+    real_settings.GARENA_GUEST_TOKEN = old_token
+    real_settings.OB_VERSION = old_ob
+
+    try:
+        from core.crypto import cipher
+        cipher.__init__()
+    except ImportError:
+        pass
 
 @pytest.fixture
 def sample_uid():

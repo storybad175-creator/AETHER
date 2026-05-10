@@ -24,8 +24,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task = None
+        self._lock = asyncio.Lock()
+
+    async def _start_cleanup(self):
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -34,7 +40,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             now = time.time()
             to_delete = []
             for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
                 if not ts_list or now - ts_list[-1] > 300:
                     to_delete.append(ip)
 
@@ -42,6 +47,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        await self._start_cleanup()
         client_ip = request.client.host
         now = time.time()
 
@@ -90,12 +96,18 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Granular mapping of validation errors
+        error_msg = exc.errors()[0]["msg"]
+        code = ErrorCode.INVALID_UID if "uid" in str(exc.errors()).lower() else \
+               ErrorCode.INVALID_REGION if "region" in str(exc.errors()).lower() else \
+               "INVALID_INPUT"
+
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": error_msg,
                     "retryable": False
                 }
             }

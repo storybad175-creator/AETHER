@@ -4,7 +4,7 @@ from core.proto import encode_request, decode_response, encode_varint
 from core.decoder import decode_player_data
 from api.schemas import PlayerData
 
-def test_aes_round_trip():
+def test_aes_round_trip(mock_settings):
     original = b"hello world 123"
     encrypted = aes_encrypt(original)
     decrypted = aes_decrypt(encrypted)
@@ -25,10 +25,9 @@ def test_proto_response_decode_nested():
 
     decoded = decode_response(outer_payload)
     assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
-
-    inner_decoded = decode_response(decoded[1])
-    assert inner_decoded[102] == nickname_val
+    # Strategy B now decodes recursively
+    assert isinstance(decoded[1], dict)
+    assert decoded[1][102] == nickname_val
 
 def test_rank_translation():
     from config.ranks import get_rank_name

@@ -7,12 +7,27 @@ class Settings(BaseSettings):
     Loaded from environment variables or .env file.
     """
     # Garena guest credentials
-    GARENA_GUEST_UID: str = Field(default="your_guest_uid_here")
-    GARENA_GUEST_TOKEN: str = Field(default="your_guest_token_here")
+    # Required for the MajorLogin authentication flow.
+    GARENA_GUEST_UID: str = Field(
+        default="your_guest_uid_here",
+        description="Garena Guest UID captured from MajorLogin request"
+    )
+    GARENA_GUEST_TOKEN: str = Field(
+        default="your_guest_token_here",
+        description="Garena Guest Token captured from MajorLogin request"
+    )
 
     # AES crypto constants (Hex strings)
-    AES_KEY: str = Field(default="your_32_byte_hex_key_here")
-    AES_IV: str = Field(default="your_16_byte_hex_iv_here")
+    # These are used for wire-protocol encryption/decryption.
+    # Extracted from libil2cpp.so or libunity.so via binary analysis.
+    AES_KEY: str = Field(
+        default="your_32_byte_hex_key_here",
+        description="32-byte hex string for AES-256-CBC"
+    )
+    AES_IV: str = Field(
+        default="your_16_byte_hex_iv_here",
+        description="16-byte hex string for AES-256-CBC IV"
+    )
 
     # Cache settings
     CACHE_TTL_SECONDS: int = Field(default=300)
