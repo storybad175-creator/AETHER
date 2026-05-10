@@ -21,4 +21,5 @@ async def test_player_invalid_uid():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         response = await ac.get("/player?uid=123&region=IND")
     assert response.status_code == 400
-    assert "INVALID_INPUT" in response.text
+    # Updated to check for granular INVALID_UID code
+    assert "INVALID_UID" in response.text
