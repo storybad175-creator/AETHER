@@ -1,7 +1,6 @@
 import struct
 import logging
 from typing import Any, Dict, List, Optional, Union
-from config.fields import REQUEST_FIELD_MAP, RESPONSE_FIELD_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -52,45 +51,63 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
-    Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Decodes a response using recursive raw binary Strategy B.
+    Automatically decodes nested messages for identified field IDs.
     """
     result = {}
     pos = 0
+
+    # Define fields that are known to be nested messages
+    # 1-9 are top level categories, 301-304 are stat lines
+    NESTED_FIELDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 301, 302, 303, 304}
+
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
         except IndexError:
-            break # Reached end of data
+            break
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
+        val: Any = None
+
         if wire_type == 0: # Varint
             val, pos = decode_varint(data, pos)
-            result[field_id] = val
         elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
+            if pos + 8 > len(data): break
+            val = struct.unpack("<Q", data[pos:pos+8])[0]
             pos += 8
         elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
             length, pos = decode_varint(data, pos)
+            if pos + length > len(data): break
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
-            else:
-                result[field_id] = val
+            # Recursive decoding for nested messages
+            if field_id in NESTED_FIELDS:
+                try:
+                    # Attempt to decode as nested. If it fails, keep as bytes.
+                    nested_val = decode_response_raw(val)
+                    if nested_val:
+                        val = nested_val
+                except Exception:
+                    pass # Fallback to raw bytes
         elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
+            if pos + 4 > len(data): break
+            val = struct.unpack("<I", data[pos:pos+4])[0]
             pos += 4
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            # Skip unknown wire types to be robust
+            break
+
+        if field_id in result:
+            # Handle repeated fields
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
+        else:
+            result[field_id] = val
 
     return result
 
@@ -110,6 +127,11 @@ def encode_request(uid: str, region: str, version: str) -> bytes:
 
     return encode_request_raw(uid, region, version)
 
-def decode_response(data: bytes) -> Dict[int, Any]:
-    """Entry point for decoding player responses."""
+def decode_response(data: Union[bytes, dict]) -> Dict[int, Any]:
+    """
+    Entry point for decoding player responses.
+    Accepts either raw bytes or already decoded dict.
+    """
+    if isinstance(data, dict):
+        return data
     return decode_response_raw(data)

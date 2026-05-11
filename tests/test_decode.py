@@ -23,15 +23,15 @@ def test_proto_response_decode_nested():
     inner_payload = b"\xb2\x06" + encode_varint(len(nickname_val)) + nickname_val
     outer_payload = b"\x0a" + encode_varint(len(inner_payload)) + inner_payload
 
+    # With Strategy B recursive, it should ALREADY be a dict
     decoded = decode_response(outer_payload)
     assert 1 in decoded
-    assert isinstance(decoded[1], bytes)
-
-    inner_decoded = decode_response(decoded[1])
-    assert inner_decoded[102] == nickname_val
+    assert isinstance(decoded[1], dict)
+    assert decoded[1][102] == nickname_val
 
 def test_rank_translation():
     from config.ranks import get_rank_name
     assert get_rank_name(601) == "Heroic"
     assert get_rank_name(101) == "Bronze I"
-    assert get_rank_name(None) == "Unknown"
+    # Our updated get_rank_name returns "Unranked" for None
+    assert get_rank_name(None) == "Unranked"

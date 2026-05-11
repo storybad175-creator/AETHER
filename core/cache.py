@@ -8,11 +8,11 @@ logger = logging.getLogger(__name__)
 
 class TTLCache:
     """
-    In-memory TTL cache with LRU-ish eviction and concurrency locks.
+    In-memory TTL cache with LRU eviction and concurrency locks.
     Prevents cache stampedes by using a lock per key.
     """
     def __init__(self):
-        self._store: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._store: Dict[Tuple[str, str], Tuple[Any, float]] = {}
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}
         self._master_lock = asyncio.Lock()
 
@@ -26,7 +26,7 @@ class TTLCache:
                 self._locks[key] = asyncio.Lock()
             return self._locks[key]
 
-    def get(self, uid: str, region: str) -> Optional[Dict[str, Any]]:
+    def get(self, uid: str, region: str) -> Optional[Any]:
         key = self._get_key(uid, region)
         if key in self._store:
             data, expires_at = self._store[key]
@@ -48,12 +48,16 @@ class TTLCache:
         self._store[key] = (data, expires_at)
 
     def _evict(self):
-        """Evicts the 50 oldest entries based on expiry time."""
+        """Evicts the oldest 50 entries based on expiry time."""
         logger.info("Cache limit reached. Evicting oldest entries...")
-        # Sort by expires_at (the second element in the tuple)
+        # Sort by expires_at
         sorted_keys = sorted(self._store.keys(), key=lambda k: self._store[k][1])
         for i in range(min(50, len(sorted_keys))):
             del self._store[sorted_keys[i]]
+
+    def clear(self):
+        self._store.clear()
+        self._locks.clear()
 
 # Singleton instance
 cache = TTLCache()
