@@ -54,7 +54,11 @@ class JWTManager:
                     )
 
                 data = await resp.json()
-                self._token = data.get("jwt")
+                token = data.get("jwt")
+                if not token:
+                    raise FFError(ErrorCode.AUTH_FAILED, "No JWT found in MajorLogin response.")
+
+                self._token = token
 
                 # Default expiry 24 hours if not provided
                 expires_in = data.get("expires_in", 86400)

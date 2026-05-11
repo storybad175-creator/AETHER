@@ -1,20 +1,30 @@
 """
 Protobuf field ID mappings for request and response messages.
-Based on community reverse-engineering of the Garena Free Fire wire protocol.
+Based on community reverse-engineering of the Garena Free Fire wire protocol (OB53).
 """
 
-# Request Field IDs (Strategy B)
+# Request Field IDs (Top-level)
 REQUEST_FIELD_MAP = {
     1: "uid",
     2: "region",
     3: "version",
 }
 
-# Response Field IDs (Strategy B) - Grouped by Category
-# Note: These are example mappings based on the target schema
+# Response Field IDs (Top-level)
+# 1: Account, 2: Rank, 3: Stats, 4: Social, 5: Pet, 6: Cosmetics, 7: Pass, 8: Credit, 9: Ban
 RESPONSE_FIELD_MAP = {
-    # Account Info
+    # --- Category Roots ---
     1: "account",
+    2: "rank",
+    3: "stats",
+    4: "social",
+    5: "pet",
+    6: "cosmetics",
+    7: "pass_info",
+    8: "credit",
+    9: "ban",
+
+    # --- 1: Account Info Sub-fields ---
     101: "uid",
     102: "nickname",
     103: "level",
@@ -31,8 +41,7 @@ RESPONSE_FIELD_MAP = {
     114: "last_login_epoch",
     115: "account_type",
 
-    # Rank Info
-    2: "rank",
+    # --- 2: Rank Info Sub-fields ---
     201: "br_rank_code",
     202: "br_points",
     203: "br_max_rank_code",
@@ -41,14 +50,13 @@ RESPONSE_FIELD_MAP = {
     206: "cs_points",
     207: "cs_visible",
 
-    # Stats Info
-    3: "stats",
+    # --- 3: Stats Info Sub-fields ---
     301: "br_solo",
     302: "br_duo",
     303: "br_squad",
     304: "cs_ranked",
 
-    # StatLine sub-fields (usually nested or flat with prefixes)
+    # --- 400s: Common StatLine sub-fields ---
     401: "matches",
     402: "wins",
     403: "kills",
@@ -57,8 +65,7 @@ RESPONSE_FIELD_MAP = {
     406: "avg_damage",
     407: "booyahs",
 
-    # Social / Guild
-    4: "social",
+    # --- 4: Social / Guild Sub-fields ---
     501: "guild_id",
     502: "guild_name",
     503: "guild_level",
@@ -69,8 +76,7 @@ RESPONSE_FIELD_MAP = {
     508: "guild_leader_level",
     509: "guild_leader_rank",
 
-    # Pet Info
-    5: "pet",
+    # --- 5: Pet Info Sub-fields ---
     601: "pet_name",
     602: "pet_level",
     603: "pet_exp",
@@ -78,8 +84,7 @@ RESPONSE_FIELD_MAP = {
     605: "pet_skin_id",
     606: "pet_is_selected",
 
-    # Cosmetics
-    6: "cosmetics",
+    # --- 6: Cosmetics Sub-fields ---
     701: "avatar_id",
     702: "banner_id",
     703: "pin_id",
@@ -87,20 +92,17 @@ RESPONSE_FIELD_MAP = {
     705: "equipped_outfit_ids",
     706: "equipped_weapon_skin_ids",
 
-    # Pass Info
-    7: "pass_info",
+    # --- 7: Pass Info Sub-fields ---
     801: "booyah_pass_level",
     802: "fire_pass_status",
     803: "fire_pass_badge_count",
 
-    # Credit Info
-    8: "credit",
+    # --- 8: Credit Info Sub-fields ---
     901: "credit_score",
     902: "credit_reward_claimed",
     903: "credit_summary_period",
 
-    # Ban Info
-    9: "ban",
+    # --- 9: Ban Info Sub-fields ---
     1001: "is_banned",
     1002: "ban_period",
     1003: "ban_type",

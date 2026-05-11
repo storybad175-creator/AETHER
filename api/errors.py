@@ -10,6 +10,7 @@ class ErrorCode(str, Enum):
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     DECODE_ERROR = "DECODE_ERROR"
     TIMEOUT = "TIMEOUT"
+    INVALID_INPUT = "INVALID_INPUT"
 
 class FFError(Exception):
     """Custom exception for Free Fire API errors."""
@@ -30,6 +31,7 @@ class FFError(Exception):
 ERROR_HTTP_MAP = {
     ErrorCode.INVALID_UID: 400,
     ErrorCode.INVALID_REGION: 400,
+    ErrorCode.INVALID_INPUT: 400,
     ErrorCode.AUTH_FAILED: 401,
     ErrorCode.PLAYER_NOT_FOUND: 404,
     ErrorCode.RATE_LIMITED: 429,

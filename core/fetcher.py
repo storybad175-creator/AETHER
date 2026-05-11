@@ -1,5 +1,6 @@
 import time
 import logging
+import asyncio
 from typing import Optional
 from config.settings import settings
 from config.regions import get_region_url
@@ -20,16 +21,19 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
     """
     start_time = time.monotonic()
 
+    # Normalize input
+    uid = str(uid).strip()
+    region = region.upper().strip()
+
     # 1. Validation (Indirectly via PlayerRequest Pydantic model)
     try:
-        req = PlayerRequest(uid=uid, region=region)
-        uid = req.uid
-        region = req.region
-    except Exception as e:
-        # This will be caught by the outer try-except if not handled
+        PlayerRequest(uid=uid, region=region)
+    except Exception:
+        # Pydantic validation errors are usually handled at the route level,
+        # but we re-validate here for direct CLI calls.
         raise
 
-    # 2. Cache Check
+    # 2. Cache Check (First pass)
     cached_data = cache.get(uid, region)
     if cached_data:
         duration = int((time.monotonic() - start_time) * 1000)
@@ -45,10 +49,10 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             data=cached_data
         )
 
-    # 3. Lock per UID/Region to prevent stampede
+    # 3. Lock per UID/Region to prevent stampede (Multiple requests for same UID)
     lock = await cache.get_lock(uid, region)
     async with lock:
-        # Check again in case another coroutine filled it while we waited
+        # Check again in case another coroutine filled it while we waited for the lock
         cached_data = cache.get(uid, region)
         if cached_data:
             duration = int((time.monotonic() - start_time) * 1000)
@@ -65,17 +69,17 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             )
 
         try:
-            # 4. Build Request
+            # 4. Build Request URL
             url = f"{get_region_url(region)}/api/v1/account"
 
-            # 5. Encode & Encrypt
+            # 5. Encode & Encrypt Payload
             proto_bytes = encode_request(uid, region, settings.OB_VERSION)
             encrypted_request = aes_encrypt(proto_bytes)
 
-            # 6. Network Transport
+            # 6. Network Transport (POST)
             raw_response = await transport.post(url, encrypted_request)
 
-            # 7. Decrypt & Decode
+            # 7. Decrypt & Decode Result
             player_data = decode_player_data(raw_response)
 
             # 8. Update Cache
@@ -100,5 +104,5 @@ async def fetch_player(uid: str, region: str) -> PlayerResponse:
             logger.exception(f"Unexpected error fetching player {uid} ({region})")
             raise FFError(
                 ErrorCode.SERVICE_UNAVAILABLE,
-                f"An unexpected error occurred: {str(e)}"
+                f"An unexpected error occurred during fetch: {str(e)}"
             )
