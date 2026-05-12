@@ -12,7 +12,7 @@ class TTLCache:
     Prevents cache stampedes by using a lock per key.
     """
     def __init__(self):
-        self._store: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._store: Dict[Tuple[str, str], Tuple[Any, float]] = {}
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}
         self._master_lock = asyncio.Lock()
 
@@ -26,7 +26,7 @@ class TTLCache:
                 self._locks[key] = asyncio.Lock()
             return self._locks[key]
 
-    def get(self, uid: str, region: str) -> Optional[Dict[str, Any]]:
+    def get(self, uid: str, region: str) -> Optional[Any]:
         key = self._get_key(uid, region)
         if key in self._store:
             data, expires_at = self._store[key]

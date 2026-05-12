@@ -11,10 +11,19 @@ REQUEST_FIELD_MAP = {
 }
 
 # Response Field IDs (Strategy B) - Grouped by Category
-# Note: These are example mappings based on the target schema
 RESPONSE_FIELD_MAP = {
-    # Account Info
+    # Top-level Categories
     1: "account",
+    2: "rank",
+    3: "stats",
+    4: "social",
+    5: "pet",
+    6: "cosmetics",
+    7: "pass_info",
+    8: "credit",
+    9: "ban",
+
+    # Account Info (under ID 1)
     101: "uid",
     102: "nickname",
     103: "level",
@@ -31,8 +40,7 @@ RESPONSE_FIELD_MAP = {
     114: "last_login_epoch",
     115: "account_type",
 
-    # Rank Info
-    2: "rank",
+    # Rank Info (under ID 2)
     201: "br_rank_code",
     202: "br_points",
     203: "br_max_rank_code",
@@ -41,8 +49,7 @@ RESPONSE_FIELD_MAP = {
     206: "cs_points",
     207: "cs_visible",
 
-    # Stats Info
-    3: "stats",
+    # Stats Info (under ID 3)
     301: "br_solo",
     302: "br_duo",
     303: "br_squad",
@@ -57,8 +64,7 @@ RESPONSE_FIELD_MAP = {
     406: "avg_damage",
     407: "booyahs",
 
-    # Social / Guild
-    4: "social",
+    # Social / Guild (under ID 4)
     501: "guild_id",
     502: "guild_name",
     503: "guild_level",
@@ -69,8 +75,7 @@ RESPONSE_FIELD_MAP = {
     508: "guild_leader_level",
     509: "guild_leader_rank",
 
-    # Pet Info
-    5: "pet",
+    # Pet Info (under ID 5)
     601: "pet_name",
     602: "pet_level",
     603: "pet_exp",
@@ -78,8 +83,7 @@ RESPONSE_FIELD_MAP = {
     605: "pet_skin_id",
     606: "pet_is_selected",
 
-    # Cosmetics
-    6: "cosmetics",
+    # Cosmetics (under ID 6)
     701: "avatar_id",
     702: "banner_id",
     703: "pin_id",
@@ -87,20 +91,17 @@ RESPONSE_FIELD_MAP = {
     705: "equipped_outfit_ids",
     706: "equipped_weapon_skin_ids",
 
-    # Pass Info
-    7: "pass_info",
+    # Pass Info (under ID 7)
     801: "booyah_pass_level",
     802: "fire_pass_status",
     803: "fire_pass_badge_count",
 
-    # Credit Info
-    8: "credit",
+    # Credit Info (under ID 8)
     901: "credit_score",
     902: "credit_reward_claimed",
     903: "credit_summary_period",
 
-    # Ban Info
-    9: "ban",
+    # Ban Info (under ID 9)
     1001: "is_banned",
     1002: "ban_period",
     1003: "ban_type",

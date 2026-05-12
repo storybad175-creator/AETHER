@@ -1,32 +1,43 @@
+from __future__ import annotations
 import time
 import logging
-from typing import Any, Dict, Optional, Union
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 from core.crypto import aes_decrypt
 from core.proto import decode_response
 from api.schemas import PlayerData
 from config.ranks import get_rank_name
 from api.errors import FFError, ErrorCode
 
+logger = logging.getLogger(__name__)
+
+def epoch_to_iso(epoch: Optional[int]) -> Optional[str]:
+    """Converts unix epoch to ISO-8601 string."""
+    if not epoch or epoch <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    except Exception:
+        return None
+
 def decode_player_data(raw_encrypted: bytes) -> PlayerData:
     """
     Decrypts, decodes, and maps raw Garena response bytes to a PlayerData model.
-    Handles nested protobuf messages via Strategy B.
     """
     try:
         # Step 1: AES Decrypt
         decrypted_bytes = aes_decrypt(raw_encrypted)
 
-        # Step 2: Protobuf Decode (Top level)
-        # 1: account, 2: rank, 3: stats, 4: social, 5: pet, 6: cosmetics, 7: pass, 8: credit, 9: ban
+        # Step 2: Protobuf Decode
+        # Strategy B is now recursive, returning Dict[int, Any]
         raw_msg = decode_response(decrypted_bytes)
+        if not isinstance(raw_msg, dict):
+            raise ValueError("Failed to decode top-level message.")
 
-        def safe_get(data: Dict[int, Any], field_id: int, default: Any = None) -> Any:
-            return data.get(field_id, default)
-
-        def decode_nested(data: Any) -> Dict[int, Any]:
-            if isinstance(data, bytes):
-                return decode_response(data)
-            return {}
+        def safe_get(data: Any, field_id: int, default: Any = None) -> Any:
+            if isinstance(data, dict):
+                return data.get(field_id, default)
+            return default
 
         def to_str(data: Any) -> Optional[str]:
             if isinstance(data, bytes):
@@ -39,7 +50,9 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         # --- Sub-message Decoders ---
 
         # 1: Account
-        acc_raw = decode_nested(safe_get(raw_msg, 1))
+        acc_raw = safe_get(raw_msg, 1, {})
+        c_at = safe_get(acc_raw, 113)
+        l_in = safe_get(acc_raw, 114)
         account = {
             "uid": to_str(safe_get(acc_raw, 101)),
             "nickname": to_str(safe_get(acc_raw, 102)),
@@ -53,13 +66,15 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             "honor_score": safe_get(acc_raw, 110),
             "total_likes": safe_get(acc_raw, 111),
             "ob_version": to_str(safe_get(acc_raw, 112)),
-            "created_at_epoch": safe_get(acc_raw, 113),
-            "last_login_epoch": safe_get(acc_raw, 114),
+            "created_at_epoch": c_at,
+            "created_at": epoch_to_iso(c_at),
+            "last_login_epoch": l_in,
+            "last_login": epoch_to_iso(l_in),
             "account_type": "Normal" if safe_get(acc_raw, 115) == 0 else "Special"
         }
 
         # 2: Rank
-        rank_raw = decode_nested(safe_get(raw_msg, 2))
+        rank_raw = safe_get(raw_msg, 2, {})
         rank = {
             "battle_royale": {
                 "rank_name": get_rank_name(safe_get(rank_raw, 201)),
@@ -78,10 +93,9 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         }
 
         # 3: Stats
-        stats_raw = decode_nested(safe_get(raw_msg, 3))
+        stats_raw = safe_get(raw_msg, 3, {})
 
-        def parse_stat_line(data_bytes: bytes) -> Dict[str, Any]:
-            d = decode_response(data_bytes)
+        def parse_stat_line(d: Any) -> Dict[str, Any]:
             m = safe_get(d, 401, 0)
             w = safe_get(d, 402, 0)
             k = safe_get(d, 403, 0)
@@ -101,66 +115,68 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
                 "booyahs": w
             }
 
+        cs_r_raw = safe_get(stats_raw, 304, {})
+        cs_m = safe_get(cs_r_raw, 401, 0)
+        cs_w = safe_get(cs_r_raw, 402, 0)
+        cs_k = safe_get(cs_r_raw, 403, 0)
+
         stats = {
             "battle_royale": {
-                "solo": parse_stat_line(safe_get(stats_raw, 301, b"")),
-                "duo": parse_stat_line(safe_get(stats_raw, 302, b"")),
-                "squad": parse_stat_line(safe_get(stats_raw, 303, b""))
+                "solo": parse_stat_line(safe_get(stats_raw, 301, {})),
+                "duo": parse_stat_line(safe_get(stats_raw, 302, {})),
+                "squad": parse_stat_line(safe_get(stats_raw, 303, {}))
             },
             "clash_squad": {
                 "ranked": {
-                    "matches": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 401, 0),
-                    "wins": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 402, 0),
-                    "win_rate": "0.00%", # Computed by Pydantic or manually if needed
-                    "kills": safe_get(decode_nested(safe_get(stats_raw, 304, b"")), 403, 0),
-                    "kd_ratio": 0.0
+                    "matches": cs_m,
+                    "wins": cs_w,
+                    "win_rate": f"{(cs_w / max(cs_m, 1) * 100):.2f}%",
+                    "kills": cs_k,
+                    "kd_ratio": round(cs_k / max(cs_m - cs_w, 1), 2)
                 }
             }
         }
-        # Correct CS ranked win rate and KD
-        cs_r = stats["clash_squad"]["ranked"]
-        cs_r["win_rate"] = f"{(cs_r['wins'] / max(cs_r['matches'], 1) * 100):.2f}%"
-        cs_r["kd_ratio"] = round(cs_r["kills"] / max(cs_r["matches"] - cs_r["wins"], 1), 2)
 
         # 4: Social
-        social_raw = decode_nested(safe_get(raw_msg, 4))
-        guild_id = to_str(safe_get(social_raw, 501))
+        soc_raw = safe_get(raw_msg, 4, {})
+        guild_id = to_str(safe_get(soc_raw, 501))
         social = {
             "guild": {
                 "id": guild_id,
-                "name": to_str(safe_get(social_raw, 502)),
-                "level": safe_get(social_raw, 503),
-                "member_count": safe_get(social_raw, 504),
-                "capacity": safe_get(social_raw, 505),
+                "name": to_str(safe_get(soc_raw, 502)),
+                "level": safe_get(soc_raw, 503),
+                "member_count": safe_get(soc_raw, 504),
+                "capacity": safe_get(soc_raw, 505),
                 "leader": {
-                    "uid": to_str(safe_get(social_raw, 506)),
-                    "nickname": to_str(safe_get(social_raw, 507)),
-                    "level": safe_get(social_raw, 508),
-                    "rank_name": get_rank_name(safe_get(social_raw, 509))
+                    "uid": to_str(safe_get(soc_raw, 506)),
+                    "nickname": to_str(safe_get(soc_raw, 507)),
+                    "level": safe_get(soc_raw, 508),
+                    "rank_name": get_rank_name(safe_get(soc_raw, 509))
                 }
             } if guild_id else None
         }
 
         # 5: Pet
-        pet_raw = decode_nested(safe_get(raw_msg, 5))
-        pet_name = to_str(safe_get(pet_raw, 601))
+        pet_raw = safe_get(raw_msg, 5, {})
+        p_name = to_str(safe_get(pet_raw, 601))
         pet = {
-            "name": pet_name,
+            "name": p_name,
             "level": safe_get(pet_raw, 602),
             "exp": safe_get(pet_raw, 603),
             "active_skill": to_str(safe_get(pet_raw, 604)),
             "skin_id": safe_get(pet_raw, 605),
             "is_selected": bool(safe_get(pet_raw, 606))
-        } if pet_name else None
+        } if p_name else None
 
         # 6: Cosmetics
-        cosm_raw = decode_nested(safe_get(raw_msg, 6))
-
+        cosm_raw = safe_get(raw_msg, 6, {})
         def to_int_list(data: Any) -> list[int]:
             if isinstance(data, list):
-                return [int.from_bytes(x, 'little') if isinstance(x, bytes) else x for x in data]
+                return [int.from_bytes(x, 'little') if isinstance(x, bytes) else int(x) for x in data]
             if isinstance(data, bytes):
-                return [int.from_bytes(data, 'little')] # Simplified
+                return [int.from_bytes(data, 'little')]
+            if data is not None:
+                return [int(data)]
             return []
 
         cosmetics = {
@@ -173,7 +189,7 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         }
 
         # 7: Pass
-        pass_raw = decode_nested(safe_get(raw_msg, 7))
+        pass_raw = safe_get(raw_msg, 7, {})
         pass_info = {
             "booyah_pass_level": safe_get(pass_raw, 801),
             "fire_pass_status": to_str(safe_get(pass_raw, 802)) or "Basic",
@@ -181,7 +197,7 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         }
 
         # 8: Credit
-        cred_raw = decode_nested(safe_get(raw_msg, 8))
+        cred_raw = safe_get(raw_msg, 8, {})
         credit = {
             "score": safe_get(cred_raw, 901),
             "reward_claimed": bool(safe_get(cred_raw, 902)),
@@ -189,7 +205,7 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
         }
 
         # 9: Ban
-        ban_raw = decode_nested(safe_get(raw_msg, 9))
+        ban_raw = safe_get(raw_msg, 9, {})
         ban = {
             "is_banned": bool(safe_get(ban_raw, 1001)),
             "ban_period": to_str(safe_get(ban_raw, 1002)),
@@ -208,6 +224,8 @@ def decode_player_data(raw_encrypted: bytes) -> PlayerData:
             ban=ban
         )
 
+    except FFError:
+        raise
     except Exception as e:
         logger.exception("Decoding error")
         raise FFError(

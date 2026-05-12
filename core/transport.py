@@ -20,7 +20,6 @@ class AsyncTransport:
     @property
     def session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            # We initialize it here if needed, but main.py should handle life-cycle
             self._session = aiohttp.ClientSession(
                 headers={
                     "User-Agent": "FreeFire/1.103.1 (Android 13; Pixel 7)",
@@ -64,7 +63,11 @@ class AsyncTransport:
                         raise FFError(ErrorCode.AUTH_FAILED, "Authentication failed after refresh.")
 
                     if resp.status == 404:
-                        raise FFError(ErrorCode.PLAYER_NOT_FOUND, "Player UID not found in this region.")
+                        # FM-02: Player might exist in another region
+                        raise FFError(
+                            ErrorCode.PLAYER_NOT_FOUND,
+                            "Player UID not found in this region. Try: SG, IND, BR, ID."
+                        )
 
                     if resp.status == 429:
                         retry_after = int(resp.headers.get("Retry-After", 10))
@@ -72,7 +75,11 @@ class AsyncTransport:
                         if attempt < retry_count:
                             await asyncio.sleep(retry_after)
                             continue
-                        raise FFError(ErrorCode.RATE_LIMITED, "Exceeded Garena API rate limits.", extra={"retry_after": retry_after})
+                        raise FFError(
+                            ErrorCode.RATE_LIMITED,
+                            "Exceeded Garena API rate limits.",
+                            extra={"retry_after": retry_after}
+                        )
 
                     if resp.status >= 500:
                         logger.error(f"Garena server error ({resp.status}). Attempt {attempt}/{retry_count}")
@@ -81,7 +88,6 @@ class AsyncTransport:
                             continue
                         raise FFError(ErrorCode.SERVICE_UNAVAILABLE, "Garena services are currently unavailable.")
 
-                    # Handle other non-200 codes
                     body = await resp.text()
                     logger.error(f"Unexpected response {resp.status}: {body}")
                     raise FFError(ErrorCode.SERVICE_UNAVAILABLE, f"Unexpected Garena response: {resp.status}")

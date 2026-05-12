@@ -1,19 +1,109 @@
 syntax = "proto3";
 
-// Note: This is a simplified documentation of the response schema.
-// In practice, the API returns a complex nested structure
-// that we decode using Strategy B blackbox field mapping.
+package freefire;
 
 message PlayerResponse {
+  // Top level categories
   AccountInfo account = 1;
   RankInfo rank = 2;
   StatsInfo stats = 3;
-  // ... more fields
+  SocialInfo social = 4;
+  PetInfo pet = 5;
+  CosmeticsInfo cosmetics = 6;
+  PassInfo pass = 7;
+  CreditInfo credit = 8;
+  BanInfo ban = 9;
 }
 
 message AccountInfo {
   string uid = 101;
   string nickname = 102;
   int32 level = 103;
-  // ...
+  int32 exp = 104;
+  string region = 105;
+  int32 season_id = 106;
+  string preferred_mode = 107;
+  string language = 108;
+  string signature = 109;
+  int32 honor_score = 110;
+  int32 total_likes = 111;
+  string ob_version = 112;
+  int64 created_at_epoch = 113;
+  int64 last_login_epoch = 114;
+  int32 account_type = 115;
+}
+
+message RankInfo {
+  int32 br_rank_code = 201;
+  int32 br_points = 202;
+  int32 br_max_rank_code = 203;
+  bool br_visible = 204;
+  int32 cs_rank_code = 205;
+  int32 cs_points = 206;
+  bool cs_visible = 207;
+}
+
+message StatLine {
+  int32 matches = 401;
+  int32 wins = 402;
+  int32 kills = 403;
+  int32 deaths = 404;
+  int32 headshots = 405;
+  float avg_damage = 406;
+  int32 booyahs = 407;
+}
+
+message StatsInfo {
+  StatLine br_solo = 301;
+  StatLine br_duo = 302;
+  StatLine br_squad = 303;
+  StatLine cs_ranked = 304;
+}
+
+message SocialInfo {
+  string guild_id = 501;
+  string guild_name = 502;
+  int32 guild_level = 503;
+  int32 guild_member_count = 504;
+  int32 guild_capacity = 505;
+  string guild_leader_uid = 506;
+  string guild_leader_nickname = 507;
+  int32 guild_leader_level = 508;
+  int32 guild_leader_rank = 509;
+}
+
+message PetInfo {
+  string pet_name = 601;
+  int32 pet_level = 602;
+  int32 pet_exp = 603;
+  string pet_active_skill = 604;
+  int32 pet_skin_id = 605;
+  bool pet_is_selected = 606;
+}
+
+message CosmeticsInfo {
+  int32 avatar_id = 701;
+  int32 banner_id = 702;
+  int32 pin_id = 703;
+  int32 character_id = 704;
+  repeated int32 equipped_outfit_ids = 705;
+  repeated int32 equipped_weapon_skin_ids = 706;
+}
+
+message PassInfo {
+  int32 booyah_pass_level = 801;
+  string fire_pass_status = 802;
+  int32 fire_pass_badge_count = 803;
+}
+
+message CreditInfo {
+  int32 credit_score = 901;
+  bool credit_reward_claimed = 902;
+  string credit_summary_period = 903;
+}
+
+message BanInfo {
+  bool is_banned = 1001;
+  string ban_period = 1002;
+  string ban_type = 1003;
 }
