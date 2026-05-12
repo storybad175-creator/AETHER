@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Supported regions and their corresponding Garena base URLs.
 All 14 regions as of OB53 (April 2026).
@@ -17,7 +18,7 @@ REGION_MAP: dict[str, str] = {
     "PK": "https://client.pk.freefiremobile.com",
     "CIS": "https://client.cis.freefiremobile.com",
     "BD": "https://client.bd.freefiremobile.com",
-    "NA": "https://client.us.freefiremobile.com",  # NA often shares with US or has its own
+    "NA": "https://client.us.freefiremobile.com",
 }
 
 def get_region_url(region: str) -> str:

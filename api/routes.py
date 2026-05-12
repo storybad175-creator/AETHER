@@ -1,13 +1,55 @@
+from __future__ import annotations
 import asyncio
 import time
 from fastapi import APIRouter, Query
 from typing import List, Optional
 from core.fetcher import fetch_player
-from api.schemas import PlayerResponse
+from api.schemas import PlayerResponse, PlayerRequest
 from config.regions import REGION_MAP
 from config.settings import settings
+from api.errors import FFError, ErrorCode
 
 router = APIRouter()
+
+async def safe_fetch(uid: str, region: str) -> PlayerResponse:
+    """Helper to fetch player while catching and wrapping errors into PlayerResponse."""
+    try:
+        # Pre-validate to catch formatting errors early
+        PlayerRequest(uid=uid, region=region)
+        return await fetch_player(uid, region)
+    except FFError as e:
+        return PlayerResponse(
+            metadata={
+                "request_uid": uid,
+                "request_region": region,
+                "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                "response_time_ms": 0,
+                "api_version": settings.OB_VERSION,
+                "cache_hit": False
+            },
+            error={
+                "code": e.code,
+                "message": e.message,
+                "retryable": e.retryable,
+                "extra": e.extra
+            }
+        )
+    except Exception:
+        return PlayerResponse(
+            metadata={
+                "request_uid": uid,
+                "request_region": region,
+                "fetched_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                "response_time_ms": 0,
+                "api_version": settings.OB_VERSION,
+                "cache_hit": False
+            },
+            error={
+                "code": ErrorCode.SERVICE_UNAVAILABLE,
+                "message": "An unexpected error occurred during batch fetch.",
+                "retryable": False
+            }
+        )
 
 @router.get("/player", response_model=PlayerResponse)
 async def get_player(
@@ -24,7 +66,7 @@ async def get_players_batch(
 ):
     """Fetches multiple players concurrently (max 10)."""
     uid_list = [uid.strip() for uid in uids.split(",") if uid.strip()][:10]
-    tasks = [fetch_player(uid, region) for uid in uid_list]
+    tasks = [safe_fetch(uid, region) for uid in uid_list]
     return await asyncio.gather(*tasks)
 
 @router.get("/health")

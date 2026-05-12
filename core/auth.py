@@ -20,10 +20,9 @@ class JWTManager:
     async def get_token(self) -> str:
         """
         Returns a valid JWT token.
-        Refreshes if the token is missing, expired, or near expiry.
+        Refreshes if the token is missing, expired, or near expiry (60s).
         """
         async with self._lock:
-            # Proactive refresh: if token expires in less than 60 seconds
             if not self._token or time.time() > (self._expires_at - 60):
                 await self.refresh()
             return self._token
@@ -31,8 +30,9 @@ class JWTManager:
     async def refresh(self):
         """
         Performs the MajorLogin request to obtain a new JWT.
+        Uses a local import to avoid circular dependencies with transport.
         """
-        from core.transport import transport # Local import to avoid circular dependency
+        from core.transport import transport
 
         logger.info("Refreshing Garena MajorLogin JWT...")
 
@@ -40,23 +40,25 @@ class JWTManager:
         payload = {
             "uid": settings.GARENA_GUEST_UID,
             "token": settings.GARENA_GUEST_TOKEN,
-            "region": "SG" # MajorLogin usually uses a stable region
+            "region": "SG"
         }
 
         try:
-            # We use a raw post here to avoid bearer token loop
             async with transport.session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
                     logger.error(f"MajorLogin failed with status {resp.status}")
                     raise FFError(
                         ErrorCode.AUTH_FAILED,
-                        "Failed to authenticate with Garena MajorLogin endpoint."
+                        f"Garena authentication failed with status {resp.status}."
                     )
 
                 data = await resp.json()
-                self._token = data.get("jwt")
+                token = data.get("jwt")
+                if not token:
+                    raise FFError(ErrorCode.AUTH_FAILED, "No JWT returned from MajorLogin.")
 
-                # Default expiry 24 hours if not provided
+                self._token = token
+                # Default expiry 24 hours (86400s) if not provided
                 expires_in = data.get("expires_in", 86400)
                 self._expires_at = time.time() + float(expires_in)
 
@@ -69,7 +71,7 @@ class JWTManager:
             raise FFError(ErrorCode.AUTH_FAILED, f"JWT refresh failed: {str(e)}")
 
     def force_refresh(self):
-        """Invalidates current token to trigger refresh on next get_token call."""
+        """Invalidates current token to trigger refresh on next request."""
         self._token = None
         self._expires_at = 0
 

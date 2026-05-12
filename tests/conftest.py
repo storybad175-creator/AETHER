@@ -1,22 +1,23 @@
 import pytest
 import asyncio
-import time
-from unittest.mock import MagicMock, AsyncMock, patch
-from config.settings import settings
+from unittest.mock import MagicMock
+from config.settings import settings as real_settings
 
-@pytest.fixture
-def mock_settings():
-    with patch("config.settings.settings") as mocked:
-        mocked.AES_KEY = "0" * 64
-        mocked.AES_IV = "0" * 32
-        mocked.GARENA_GUEST_UID = "test_uid"
-        mocked.GARENA_GUEST_TOKEN = "test_token"
-        mocked.OB_VERSION = "OB53"
-        yield mocked
+@pytest.fixture(autouse=True)
+def mock_settings(monkeypatch):
+    """Patches settings for test isolation."""
+    # Directly modify the real_settings instance since it's used as a singleton
+    monkeypatch.setattr(real_settings, "GARENA_GUEST_UID", "test_uid")
+    monkeypatch.setattr(real_settings, "GARENA_GUEST_TOKEN", "test_token")
+    monkeypatch.setattr(real_settings, "AES_KEY", "0" * 64)
+    monkeypatch.setattr(real_settings, "AES_IV", "0" * 32)
+    monkeypatch.setattr(real_settings, "CACHE_TTL_SECONDS", 3600)
+    monkeypatch.setattr(real_settings, "RATE_LIMIT_RPM", 1000)
+    return real_settings
 
 @pytest.fixture
 def sample_uid():
-    return "4899748638"
+    return "1234567890"
 
 @pytest.fixture
 def sample_region():
@@ -25,15 +26,3 @@ def sample_region():
 @pytest.fixture
 def mock_jwt():
     return "mock.jwt.token"
-
-@pytest.fixture
-def mock_player_data_dict():
-    return {
-        "uid": 4899748638,
-        "nickname": "Ƭɴɪᴛᴀᴄʜɪ",
-        "level": 60,
-        "br_rank_code": 104,
-        "br_points": 2541,
-        "guild_id": 3037982359,
-        "guild_name": "Ƭ͢ɴ_நா#கதா"
-    }
