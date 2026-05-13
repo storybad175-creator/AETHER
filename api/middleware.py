@@ -24,8 +24,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task = None
+        self._lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -34,7 +34,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             now = time.time()
             to_delete = []
             for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
                 if not ts_list or now - ts_list[-1] > 300:
                     to_delete.append(ip)
 
@@ -42,13 +41,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        # Lazy start of cleanup task
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
+
+        # Dynamic read of rate limit
+        rpm = settings.RATE_LIMIT_RPM
 
         # Filter timestamps within the last 60 seconds
         self.visits[client_ip] = [t for t in self.visits.get(client_ip, []) if now - t < 60]
 
-        if len(self.visits[client_ip]) >= settings.RATE_LIMIT_RPM:
+        if len(self.visits[client_ip]) >= rpm:
             return JSONResponse(
                 status_code=429,
                 content={
@@ -90,12 +98,14 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        msg = exc.errors()[0]["msg"]
+        code = ErrorCode.INVALID_UID if "uid" in msg.lower() else ErrorCode.INVALID_REGION if "region" in msg.lower() else "INVALID_INPUT"
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
-                    "message": exc.errors()[0]["msg"],
+                    "code": code,
+                    "message": msg,
                     "retryable": False
                 }
             }
