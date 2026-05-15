@@ -50,47 +50,61 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 
     return pack_string(1, uid) + pack_string(2, region) + pack_string(3, version)
 
-def decode_response_raw(data: bytes) -> Dict[int, Any]:
+def decode_response_raw(data: bytes, is_nested: bool = False) -> Dict[int, Any]:
     """
-    Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Decodes a response using recursive raw binary Strategy B.
+    Automatically decodes nested messages for identified field IDs.
     """
     result = {}
     pos = 0
+
+    # Field IDs that are known to be nested messages
+    NESTED_FIELDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 301, 302, 303, 304}
+
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
-        except IndexError:
-            break # Reached end of data
+        except (IndexError, ValueError):
+            break # Reached end or malformed data
 
         field_id = tag >> 3
         wire_type = tag & 0x07
 
+        val: Any = None
         if wire_type == 0: # Varint
             val, pos = decode_varint(data, pos)
-            result[field_id] = val
         elif wire_type == 1: # 64-bit
-            result[field_id] = struct.unpack("<Q", data[pos:pos+8])[0]
+            val = struct.unpack("<Q", data[pos:pos+8])[0]
             pos += 8
         elif wire_type == 2: # Length-delimited (String, Bytes, or Nested)
             length, pos = decode_varint(data, pos)
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
-            if field_id in result:
-                # Handle repeated fields
-                if not isinstance(result[field_id], list):
-                    result[field_id] = [result[field_id]]
-                result[field_id].append(val)
-            else:
-                result[field_id] = val
+            if field_id in NESTED_FIELDS:
+                try:
+                    # Attempt recursive decode
+                    if len(val) > 0:
+                         inner_val = decode_response_raw(val, is_nested=True)
+                         if inner_val:
+                             val = inner_val
+                except Exception:
+                    # Fallback to raw bytes if decoding fails
+                    pass
         elif wire_type == 5: # 32-bit
-            result[field_id] = struct.unpack("<I", data[pos:pos+4])[0]
+            val = struct.unpack("<I", data[pos:pos+4])[0]
             pos += 4
         else:
-            raise ValueError(f"Unsupported wire type: {wire_type}")
+            # Skip unknown wire types
+            continue
+
+        if field_id in result:
+            # Handle repeated fields
+            if not isinstance(result[field_id], list):
+                result[field_id] = [result[field_id]]
+            result[field_id].append(val)
+        else:
+            result[field_id] = val
 
     return result
 

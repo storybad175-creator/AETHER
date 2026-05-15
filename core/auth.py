@@ -37,6 +37,7 @@ class JWTManager:
         logger.info("Refreshing Garena MajorLogin JWT...")
 
         url = "https://loginbp.ggblueshark.com/MajorLogin"
+        # We ensure credentials never appear in logs by not logging the payload
         payload = {
             "uid": settings.GARENA_GUEST_UID,
             "token": settings.GARENA_GUEST_TOKEN,
@@ -47,6 +48,7 @@ class JWTManager:
             # We use a raw post here to avoid bearer token loop
             async with transport.session.post(url, json=payload, timeout=10) as resp:
                 if resp.status != 200:
+                    # Do NOT log the payload or credentials here
                     logger.error(f"MajorLogin failed with status {resp.status}")
                     raise FFError(
                         ErrorCode.AUTH_FAILED,
@@ -55,6 +57,10 @@ class JWTManager:
 
                 data = await resp.json()
                 self._token = data.get("jwt")
+
+                if not self._token:
+                    logger.error("MajorLogin response missing JWT")
+                    raise FFError(ErrorCode.AUTH_FAILED, "Garena MajorLogin response missing JWT.")
 
                 # Default expiry 24 hours if not provided
                 expires_in = data.get("expires_in", 86400)
@@ -66,7 +72,7 @@ class JWTManager:
             if isinstance(e, FFError):
                 raise
             logger.exception("Unexpected error during JWT refresh")
-            raise FFError(ErrorCode.AUTH_FAILED, f"JWT refresh failed: {str(e)}")
+            raise FFError(ErrorCode.AUTH_FAILED, "JWT refresh failed due to a network or server error.")
 
     def force_refresh(self):
         """Invalidates current token to trigger refresh on next get_token call."""

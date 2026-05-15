@@ -1,11 +1,13 @@
+from __future__ import annotations
 import asyncio
 import time
 from fastapi import APIRouter, Query
 from typing import List, Optional
 from core.fetcher import fetch_player
-from api.schemas import PlayerResponse
+from api.schemas import PlayerResponse, PlayerRequest
 from config.regions import REGION_MAP
 from config.settings import settings
+from pydantic import ValidationError
 
 router = APIRouter()
 
@@ -17,6 +19,72 @@ async def get_player(
     """Fetches full player data for a given UID and region."""
     return await fetch_player(uid, region)
 
+async def safe_fetch(uid: str, region: str) -> PlayerResponse:
+    """Safe wrapper for batch fetching to prevent one failure from stopping others."""
+    try:
+        # Validate first
+        PlayerRequest(uid=uid, region=region)
+        return await fetch_player(uid, region)
+    except ValidationError as e:
+        from api.errors import ErrorCode
+        from api.schemas import ResponseMetadata, ErrorDetail
+        msg = str(e)
+        code = ErrorCode.INVALID_UID
+        if "region" in msg.lower():
+            code = ErrorCode.INVALID_REGION
+        return PlayerResponse(
+            metadata=ResponseMetadata(
+                request_uid=uid,
+                request_region=region,
+                fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                response_time_ms=0,
+                api_version=settings.OB_VERSION,
+                cache_hit=False
+            ),
+            error=ErrorDetail(
+                code=code,
+                message=e.errors()[0]["msg"],
+                retryable=False
+            )
+        )
+    except Exception as e:
+        from api.errors import FFError, ErrorCode
+        if isinstance(e, FFError):
+            from api.schemas import ResponseMetadata, ErrorDetail
+            return PlayerResponse(
+                metadata=ResponseMetadata(
+                    request_uid=uid,
+                    request_region=region,
+                    fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    response_time_ms=0,
+                    api_version=settings.OB_VERSION,
+                    cache_hit=False
+                ),
+                error=ErrorDetail(
+                    code=e.code,
+                    message=e.message,
+                    retryable=e.retryable,
+                    extra=e.extra
+                )
+            )
+        else:
+             from api.schemas import ResponseMetadata, ErrorDetail
+             return PlayerResponse(
+                metadata=ResponseMetadata(
+                    request_uid=uid,
+                    request_region=region,
+                    fetched_at=time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    response_time_ms=0,
+                    api_version=settings.OB_VERSION,
+                    cache_hit=False
+                ),
+                error=ErrorDetail(
+                    code="SERVICE_UNAVAILABLE",
+                    message="An unexpected error occurred during batch fetch.",
+                    retryable=False
+                )
+            )
+
 @router.get("/batch", response_model=List[PlayerResponse])
 async def get_players_batch(
     uids: str = Query(..., description="Comma-separated list of UIDs"),
@@ -24,7 +92,7 @@ async def get_players_batch(
 ):
     """Fetches multiple players concurrently (max 10)."""
     uid_list = [uid.strip() for uid in uids.split(",") if uid.strip()][:10]
-    tasks = [fetch_player(uid, region) for uid in uid_list]
+    tasks = [safe_fetch(uid, region) for uid in uid_list]
     return await asyncio.gather(*tasks)
 
 @router.get("/health")
