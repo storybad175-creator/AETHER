@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Mapping for rank integer codes to human-readable rank names.
 Supports both Battle Royale (BR) and Clash Squad (CS) modes.

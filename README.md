@@ -35,8 +35,15 @@ pip install -r requirements.txt
 ## Configuration (.env)
 
 1. **Garena Guest Credentials**: Use Frida or a proxy (like Burp/Proxyman) to capture the `MajorLogin` request from the Free Fire app to get your guest UID and Token.
+   - **Methodology**:
+     - Open Free Fire.
+     - Capture traffic to `https://loginbp.ggblueshark.com/MajorLogin`.
+     - Extract `uid` and `token` from the JSON request body.
 2. **AES Constants**: Key and IV are extracted from the APK's native libraries (`libil2cpp.so` or `libunity.so`).
-3. **OB Version**: Update `OB_VERSION` in `.env` when a new game update is released.
+   - **Methodology**:
+     - Use `grep` or `strings` on the unpacked `.so` files to find 32-byte hex strings.
+     - Look for function calls involving AES or encryption initialization.
+3. **OB Version**: Update `OB_VERSION` in `.env` when a new game update is released (e.g., `OB54`).
 
 ## Usage
 
@@ -45,26 +52,33 @@ pip install -r requirements.txt
 python main.py --port 8080
 ```
 Endpoints:
-- `GET /player?uid={uid}&region={region}`
-- `GET /batch?uids={u1,u2}&region={region}`
-- `GET /health`
-- `GET /regions`
+- `GET /player?uid={uid}&region={region}`: Single player lookup.
+- `GET /batch?uids={u1,u2}&region={region}`: Concurrently fetch up to 10 players.
+- `GET /health`: Check system status and version.
+- `GET /regions`: List all supported region codes.
 
 ### CLI
 ```bash
-# Single lookup
+# Single lookup (Pretty print)
 python cli.py --uid 123456789 --region IND
 
-# Batch lookup from file
+# Single lookup (Compact JSON)
+python cli.py --uid 123456789 --region IND --format compact
+
+# Batch lookup from file (Concurrently processes UIDs)
 python cli.py --batch uids.txt --region SG
 
 # List regions
 python cli.py --regions
+
+# Check health
+python cli.py --health
 ```
 
 ## Testing
+Run the comprehensive test suite to ensure system integrity:
 ```bash
-pytest
+python3 -m pytest
 ```
 
 ## Disclaimer

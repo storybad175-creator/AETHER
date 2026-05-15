@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Supported regions and their corresponding Garena base URLs.
 All 14 regions as of OB53 (April 2026).

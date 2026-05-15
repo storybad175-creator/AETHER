@@ -2,7 +2,7 @@ import time
 import uuid
 import logging
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
@@ -24,8 +24,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.visits: Dict[str, List[float]] = {}
-        # Start background cleanup task
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._lock = asyncio.Lock()
 
     async def _cleanup_loop(self):
         """Periodically removes inactive client IP records."""
@@ -34,7 +34,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             now = time.time()
             to_delete = []
             for ip, ts_list in self.visits.items():
-                # If no requests in the last 5 minutes, consider inactive
                 if not ts_list or now - ts_list[-1] > 300:
                     to_delete.append(ip)
 
@@ -42,6 +41,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 del self.visits[ip]
 
     async def dispatch(self, request: Request, call_next):
+        # Lazy initialization of cleanup task to avoid loop issues during startup
+        if self._cleanup_task is None:
+            async with self._lock:
+                if self._cleanup_task is None:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
         client_ip = request.client.host
         now = time.time()
 
@@ -90,11 +95,17 @@ async def error_handler_middleware(request: Request, call_next):
             }
         )
     except ValidationError as exc:
+        # Determine if it's a UID or Region error for more granular coding
+        msg = str(exc)
+        code = ErrorCode.INVALID_UID
+        if "region" in msg.lower():
+            code = ErrorCode.INVALID_REGION
+
         return JSONResponse(
             status_code=400,
             content={
                 "error": {
-                    "code": "INVALID_INPUT",
+                    "code": code,
                     "message": exc.errors()[0]["msg"],
                     "retryable": False
                 }
