@@ -53,10 +53,14 @@ def encode_request_raw(uid: str, region: str, version: str) -> bytes:
 def decode_response_raw(data: bytes) -> Dict[int, Any]:
     """
     Decodes a response using raw binary Strategy B.
-    Supports nested messages by returning a Dict[int, Any].
+    Supports recursive decoding for identified nested message field IDs.
     """
     result = {}
     pos = 0
+
+    # Field IDs that are known to be nested messages
+    MESSAGE_FIELD_IDS = {1, 2, 3, 4, 5, 6, 7, 8, 9, 301, 302, 303, 304}
+
     while pos < len(data):
         try:
             tag, pos = decode_varint(data, pos)
@@ -77,8 +81,14 @@ def decode_response_raw(data: bytes) -> Dict[int, Any]:
             val = data[pos:pos+length]
             pos += length
 
-            # For Strategy B, we keep it as bytes. The decoder.py will handle
-            # whether to treat it as a string or a nested message.
+            # Recursive decoding for identified message types
+            if field_id in MESSAGE_FIELD_IDS:
+                try:
+                    val = decode_response_raw(val)
+                except Exception:
+                    # If decoding fails, keep it as raw bytes (might be a string)
+                    pass
+
             if field_id in result:
                 # Handle repeated fields
                 if not isinstance(result[field_id], list):
